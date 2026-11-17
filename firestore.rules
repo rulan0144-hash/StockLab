@@ -1,0 +1,67 @@
+rules_version = '2';
+
+// Aturan StockLab.
+//  rooms/{kode}                : dibaca semua pengguna yang sudah login anonim.
+//                                Ditulis oleh bandar dan anggota ruangan.
+//  rooms/{kode}/secret/bank    : dek bandar. Hanya bandar.
+//  rooms/{kode}/secret/{uid}   : tawaran lelang dan intipan. Pemilik dan bandar.
+//
+// Batasan: aturan ini memastikan hanya orang yang tepat yang bisa membaca data rahasia,
+// tetapi tidak memverifikasi bahwa setiap perubahan permainan sah (logikanya ada di browser).
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isBank(code) {
+      return get(/databases/$(database)/documents/rooms/$(code)).data.bankUid == request.auth.uid;
+    }
+
+    match /rooms/{code} {
+      allow read: if signedIn();
+
+      allow create: if signedIn()
+        && request.resource.data.bankUid == request.auth.uid
+        && request.resource.data.status == 'lobby'
+        && request.auth.uid in request.resource.data.uids;
+
+      allow update: if signedIn()
+        && request.resource.data.bankUid == resource.data.bankUid
+        && (
+          resource.data.bankUid == request.auth.uid
+          || request.auth.uid in resource.data.uids
+          || (resource.data.status == 'lobby'
+              && request.auth.uid in request.resource.data.uids
+              && request.resource.data.uids.hasAll(resource.data.uids))
+        );
+
+      allow delete: if signedIn() && resource.data.bankUid == request.auth.uid;
+
+      // Dek bandar
+      match /secret/bank {
+        allow read, write: if signedIn() && isBank(code);
+      }
+
+      // Dokumen rahasia tiap pemain
+      match /secret/{uid} {
+        allow read: if signedIn() && (request.auth.uid == uid || isBank(code));
+
+        allow write: if signedIn() && isBank(code);
+
+        // Pemain hanya boleh mengisi tawaran lelangnya sekali per ronde
+        allow create: if signedIn()
+          && request.auth.uid == uid
+          && request.resource.data.keys().hasOnly(['bid'])
+          && request.resource.data.bid is int;
+
+        allow update: if signedIn()
+          && request.auth.uid == uid
+          && resource.data.bid == null
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['bid'])
+          && request.resource.data.bid is int;
+      }
+    }
+  }
+}

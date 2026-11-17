@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>StockLab • Papan</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="min-h-screen bg-[#0b4635] text-slate-100 p-3 sm:p-5">
+  <header class="flex flex-wrap items-center justify-between gap-2 mb-4">
+    <div>
+      <h1 class="text-2xl font-extrabold text-amber-300">StockLab <span class="text-xs text-emerald-200/70">Papan Pasar</span></h1>
+      <p id="step" class="text-sm text-emerald-100/80"></p>
+    </div>
+    <div class="flex items-center gap-3 text-sm">
+      <span class="px-3 py-1 rounded-lg bg-black/30 border border-amber-400/40">Ronde <b id="round">-</b></span>
+      <span class="px-3 py-1 rounded-lg bg-black/30 border border-amber-400/40">Kode <b id="code" class="font-mono"></b></span>
+    </div>
+  </header>
+
+  <div id="message" class="hidden bg-black/30 rounded-2xl p-6 text-center"></div>
+
+  <div id="lobby" class="hidden bg-black/30 rounded-2xl p-6 text-center space-y-4 border border-amber-400/30">
+    <h2 class="text-xl font-bold">Gabung sekarang</h2>
+    <p>Buka <b id="join-url" class="text-amber-300"></b> di HP atau laptop, lalu masukkan kode <b id="code-big" class="font-mono text-2xl text-amber-300"></b>.</p>
+    <div id="lobby-players" class="flex flex-wrap justify-center gap-2"></div>
+  </div>
+
+  <div id="game" class="hidden space-y-4">
+    <section class="grid grid-cols-2 lg:grid-cols-5 gap-3" id="market"></section>
+    <section class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+      <div class="lg:col-span-2 bg-black/25 rounded-2xl p-4 border border-amber-400/30">
+        <div class="flex items-center justify-between mb-3">
+          <h2 class="font-bold text-amber-200">Kartu Aksi di Meja</h2>
+          <span class="text-xs text-emerald-200/80">Dek <b id="deck"></b> • Buangan <b id="discard"></b></span>
+        </div>
+        <div id="table" class="grid grid-cols-2 md:grid-cols-3 gap-2"></div>
+      </div>
+      <div class="bg-black/25 rounded-2xl p-4 border border-amber-400/30 space-y-3">
+        <h2 class="font-bold text-amber-200">Pemain</h2>
+        <div id="players" class="space-y-2"></div>
+        <h2 class="font-bold text-amber-200 pt-2">Catatan Lantai Bursa</h2>
+        <div id="log" class="space-y-1 text-xs max-h-72 overflow-y-auto pr-1"></div>
+      </div>
+    </section>
+  </div>
+
+  <div id="ended" class="hidden bg-black/30 rounded-2xl p-6 space-y-3 border border-amber-400/30"></div>
+
+<script type="module">
+  import { subscribeDoc, roomRef, toast, esc, SECTOR_NAME, SECTOR_COLOR, ACTION_DESC, STEP_LABEL, fmtDelta, ensureUser } from './js/app.js';
+
+  const code = (new URLSearchParams(location.search).get('code') || '').toUpperCase();
+  document.getElementById('code').textContent = code || '-';
+  document.getElementById('code-big').textContent = code || '-';
+  document.getElementById('join-url').textContent = new URL('player.html', location.href).href;
+
+  const $ = id => document.getElementById(id);
+  const show = (id, on) => $(id).classList.toggle('hidden', !on);
+  const message = text => { $('message').textContent = text; show('message', true); show('lobby', false); show('game', false); show('ended', false); };
+
+  function track(price, sec) {
+    let rows = '';
+    for (let p = 10; p >= 1; p--) {
+      const here = p === price;
+      rows += `<div class="flex items-center justify-between px-1.5 text-[11px] font-mono ${here ? 'text-amber-300 font-bold' : p === 5 ? 'text-white/90' : 'text-white/40'}">
+        <span>${p}</span>${here ? `<span class="w-4 h-4 rounded-full border-2 border-white/80" style="background:${SECTOR_COLOR[sec]}"></span>` : ''}</div>`;
+    }
+    return rows;
+  }
+
+  function render(s) {
+    show('message', false);
+    const isLobby = s.status === 'lobby';
+    show('lobby', isLobby);
+    show('game', !isLobby && s.status !== 'ended');
+    show('ended', s.status === 'ended');
+    $('step').textContent = STEP_LABEL[s.step] || '';
+    $('round').textContent = isLobby ? '-' : `${s.round} / ${s.maxRounds}`;
+    $('deck').textContent = s.deckCount;
+    $('discard').textContent = s.discard.length;
+
+    if (isLobby) {
+      $('lobby-players').innerHTML = s.players.map(p => `<span class="px-3 py-1 rounded-full bg-emerald-800 text-sm">${esc(p.name)}</span>`).join('')
+        || '<span class="text-sm text-slate-300">Belum ada pemain</span>';
+      return;
+    }
+
+    if (s.status === 'ended') {
+      $('ended').innerHTML = `<h2 class="text-2xl font-extrabold text-amber-300">🏆 ${esc(s.standings[0].name)} menang!</h2>
+        <div class="space-y-1">${s.standings.map((r, i) => `<div class="flex justify-between bg-black/30 rounded-xl px-4 py-2"><span>${i + 1}. ${esc(r.name)}</span><b class="font-mono">${r.score} Koin</b></div>`).join('')}</div>`;
+      return;
+    }
+
+    const cards = s.sectorOrder.map(sec => {
+      const eco = s.lastEconomy && s.lastEconomy.revealed[sec];
+      return `<div class="rounded-2xl bg-[#fafaf9] text-slate-900 overflow-hidden border-2" style="border-color:${SECTOR_COLOR[sec]}">
+        <div class="px-3 py-1.5 text-white font-bold text-sm flex justify-between" style="background:${SECTOR_COLOR[sec]}"><span>${SECTOR_NAME[sec]}</span><span class="font-mono">${s.prices[sec]}</span></div>
+        <div class="p-2 space-y-2">
+          <div class="rounded-lg p-2 text-xs ${eco && eco.purple ? 'bg-purple-700 text-white' : 'bg-slate-900 text-white'}">
+            ${eco ? `<b>${esc(fmtDelta(eco))}</b>` : `<span class="text-amber-300">Kartu Ekonomi tertutup (sisa ${s.economyLeft[sec] ?? '-'})</span>`}
+          </div>
+          <div class="bg-slate-100 rounded-lg p-1 space-y-[1px]">${track(s.prices[sec], sec)}</div>
+        </div></div>`;
+    });
+    const rek = `<div class="rounded-2xl bg-[#fafaf9] text-slate-900 overflow-hidden border-2" style="border-color:${SECTOR_COLOR.reksadana}">
+      <div class="px-3 py-1.5 text-white font-bold text-sm" style="background:${SECTOR_COLOR.reksadana}">Reksadana (tengah)</div>
+      <div class="p-3 text-center"><div class="text-[10px] uppercase text-teal-700">Harga jual & beli</div>
+      <div class="font-mono font-extrabold text-4xl text-teal-900">${s.reksadanaPrice}</div>
+      <div class="text-[10px] text-slate-500">½ × (${SECTOR_NAME[s.sectorOrder[1]]} + ${SECTOR_NAME[s.sectorOrder[2]]})</div></div></div>`;
+    cards.splice(2, 0, rek);
+    $('market').innerHTML = cards.join('');
+
+    $('table').innerHTML = s.tableCards.length
+      ? s.tableCards.map(c => `<div class="rounded-xl bg-white text-slate-900 overflow-hidden border-2" style="border-color:${SECTOR_COLOR[c.sector]}">
+          <div class="px-2 py-1 text-white text-xs font-bold" style="background:${SECTOR_COLOR[c.sector]}">${SECTOR_NAME[c.sector]}</div>
+          <div class="p-2 text-center font-bold text-sm">${c.action}</div>
+          <div class="px-2 pb-2 text-[10px] text-slate-600">${ACTION_DESC[c.action] || ''}</div></div>`).join('')
+      : '<p class="col-span-full text-center text-sm text-emerald-100/70 py-6">Tidak ada kartu di meja.</p>';
+
+    const actor = s.players.find(p => p.uid === s.actorId);
+    $('players').innerHTML = s.players.map(p => {
+      const hold = (p.cards || []).reduce((acc, c) => { if (!c.isDebt) acc[c.sector] = (acc[c.sector] || 0) + c.multiplier; return acc; }, {});
+      const holdHtml = Object.entries(hold).map(([sec, n]) => `<span class="px-1.5 py-0.5 rounded text-[10px] font-bold text-white" style="background:${SECTOR_COLOR[sec]}">${SECTOR_NAME[sec]} ${n}</span>`).join(' ');
+      const debts = (p.cards || []).filter(c => c.isDebt).length;
+      const turn = actor && actor.uid === p.uid ? 'ring-2 ring-amber-300' : '';
+      return `<div class="bg-black/30 rounded-xl p-2.5 ${turn}">
+        <div class="flex justify-between text-sm"><b>#${p.order} ${esc(p.name)}</b><span class="font-mono text-amber-300">${p.coins} Koin</span></div>
+        <div class="flex flex-wrap gap-1 mt-1">${holdHtml || '<span class="text-[11px] text-white/50">Belum ada saham</span>'}${debts ? `<span class="text-[10px] text-rose-300">🏦 hutang ${debts}</span>` : ''}</div>
+        ${s.step === 'bidding' && p.bidDone ? '<div class="text-[10px] text-emerald-300 mt-1">✔ sudah melelang</div>' : ''}
+      </div>`;
+    }).join('');
+
+    $('log').innerHTML = s.log.map(l => `<div class="bg-black/20 rounded px-2 py-1"><span class="text-amber-300 font-mono">R${l.round}</span> ${esc(l.text)}</div>`).join('');
+  }
+
+  if (!code) {
+    message('Tambahkan ?code=KODE di alamat halaman, atau buka dari beranda.');
+  } else {
+    await ensureUser();
+    subscribeDoc(roomRef(code), s => {
+      if (!s) return message('Ruangan tidak ditemukan.');
+      render(s);
+    }, () => message('Tidak bisa membaca ruangan. Periksa kode atau aturan Firestore.'));
+  }
+</script>
+</body>
+</html>

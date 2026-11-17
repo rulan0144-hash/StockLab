@@ -1,0 +1,6 @@
+{
+  "name": "stocklab",
+  "private": true,
+  "type": "module",
+  "scripts": { "test": "node test/sim.mjs" }
+}

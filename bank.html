@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>StockLab • Bandar</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="min-h-screen bg-slate-950 text-slate-100 p-3 sm:p-5">
+  <header class="flex flex-wrap items-center justify-between gap-2 mb-4">
+    <div>
+      <h1 class="text-2xl font-extrabold text-amber-300">Meja Bandar <span class="text-xs text-slate-400">(bank)</span></h1>
+      <p id="step" class="text-sm text-slate-300"></p>
+    </div>
+    <div class="text-sm px-3 py-1 rounded-lg bg-slate-800">Kode <b id="code" class="font-mono text-amber-300"></b> • Ronde <b id="round">-</b></div>
+  </header>
+
+  <div id="message" class="hidden bg-slate-900 rounded-2xl p-4 mb-4 text-rose-300"></div>
+  <div id="control" class="bg-slate-900 border border-amber-400/40 rounded-2xl p-4 mb-4 space-y-3"></div>
+
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+    <section class="bg-slate-900 rounded-2xl p-4 space-y-3">
+      <h2 class="font-bold text-amber-200">Pemain & Portofolio</h2>
+      <div id="players" class="space-y-2"></div>
+    </section>
+    <section class="bg-slate-900 rounded-2xl p-4 space-y-3">
+      <h2 class="font-bold text-amber-200">Harga & Kartu Ekonomi</h2>
+      <div id="prices" class="grid grid-cols-2 gap-2 text-sm"></div>
+      <h2 class="font-bold text-amber-200 pt-2">Catatan</h2>
+      <div id="log" class="space-y-1 text-xs max-h-80 overflow-y-auto pr-1"></div>
+    </section>
+  </div>
+
+<script type="module">
+  import {
+    E, ensureUser, subscribeDoc, roomRef, secretRef, transactBank, applyPeeks, toast, esc,
+    SECTOR_NAME, SECTOR_COLOR, STEP_LABEL, fmtDelta,
+  } from './js/app.js';
+
+  const $ = id => document.getElementById(id);
+  const code = (new URLSearchParams(location.search).get('code') || '').toUpperCase();
+  $('code').textContent = code || '-';
+
+  let uid = null, room = null, bankSecret = {};
+  const pSecrets = {};   // uid -> { bid, peek }
+  const unsubs = {};     // uid -> unsubscribe
+
+  const message = text => { $('message').textContent = text; $('message').classList.remove('hidden'); };
+
+  // ---------- aksi bandar (semua lewat transaksi) ----------
+  async function bankAct(name) {
+    try {
+      if (name === 'start') {
+        await transactBank(code, (r, s, ps) => {
+          if (r.status !== 'lobby') return false;
+          Object.assign(s, E.startGame(r));
+          E.dealRound(r, s, ps);
+        });
+      }
+      if (name === 'reveal') {
+        await transactBank(code, (r, s, ps) => {
+          if (r.step !== 'economy') return false;
+          applyPeeks(r, s, ps);
+          E.revealEconomy(r, s);
+        });
+      }
+      if (name === 'next') {
+        await transactBank(code, (r, s, ps) => {
+          if (r.step !== 'economy_done') return false;
+          E.nextRound(r, s, ps);
+        });
+      }
+    } catch (e) { toast(e.message, 'error'); }
+  }
+
+  document.addEventListener('click', e => {
+    const b = e.target.closest('[data-act]');
+    if (b) bankAct(b.dataset.act);
+  });
+
+  // ---------- tugas otomatis bandar ----------
+  // Lelang selesai saat semua pemain sudah mengunci; intipan diisi saat ada permintaan.
+  function autoTasks(r) {
+    if (r.status === 'playing' && r.step === 'bidding' && r.players.every(p => p.bidDone)) {
+      transactBank(code, (t, s, ps) => {
+        if (t.step !== 'bidding' || !t.players.every(p => p.bidDone)) return false;
+        const bids = Object.fromEntries(t.players.map(p => [p.uid, ps[p.uid]?.bid || 0]));
+        E.resolveBidding(t, bids);
+      }).catch(e => toast(e.message, 'error'));
+    }
+    if ((r.peekRequests || []).length) {
+      transactBank(code, (t, s, ps) => {
+        if (!(t.peekRequests || []).length) return false;
+        applyPeeks(t, s, ps);
+      }).catch(e => toast(e.message, 'error'));
+    }
+  }
+
+  // Ikuti dokumen rahasia tiap pemain (bid dan intipan) saat daftar pemain berubah.
+  function syncSecrets(r) {
+    for (const p of r.players) {
+      if (unsubs[p.uid]) continue;
+      unsubs[p.uid] = subscribeDoc(secretRef(code, p.uid), s => {
+        pSecrets[p.uid] = s || { bid: null, peek: {} };
+        if (room) render(room);
+      });
+    }
+  }
+
+  function controls(s) {
+    const n = s.players.length;
+    let html = '';
+    if (s.status === 'lobby') {
+      html = `<p>Pemain bergabung: <b>${n}</b> (minimal 2, maksimal 5). Bagikan kode <b class="font-mono text-amber-300">${code}</b> ke pemain.</p>
+        <button data-act="start" ${n < 2 ? 'disabled' : ''} class="px-5 py-2.5 rounded-xl bg-amber-400 text-slate-950 font-bold disabled:opacity-40">Mulai Permainan</button>`;
+    } else if (s.step === 'bidding') {
+      const done = s.players.filter(p => p.bidDone).length;
+      html = `<p>Fase I • Lelang: <b>${done}/${n}</b> pemain sudah mengunci lelang. Hasil dibuka otomatis saat semua sudah masuk.</p>`;
+    } else if (s.step === 'action') {
+      const a = s.players.find(p => p.uid === s.actorId);
+      html = `<p>Fase II • Aksi. Giliran: <b class="text-amber-300">${a ? esc(a.name) : '-'}</b>. Sisa kartu di meja: ${s.tableCards.length}.</p>`;
+    } else if (s.step === 'sell') {
+      const a = s.players.find(p => p.uid === s.actorId);
+      html = `<p>Fase III • Jual. Giliran: <b class="text-amber-300">${a ? esc(a.name) : '-'}</b>.</p>`;
+    } else if (s.step === 'economy') {
+      const tops = s.sectorOrder.map(sec => {
+        const c = bankSecret.economy?.[sec]?.[0];
+        return `<div class="bg-slate-800 rounded-lg px-2 py-1"><span style="color:${SECTOR_COLOR[sec]}">${SECTOR_NAME[sec]}</span>: <b>${c ? esc(fmtDelta(c)) : '-'}</b></div>`;
+      }).join('');
+      html = `<p>Fase IV • Ekonomi. Kartu teratas (rahasia, hanya bandar yang melihat):</p>
+        <div class="grid grid-cols-2 gap-2 text-sm">${tops}</div>
+        <button data-act="reveal" class="px-5 py-2.5 rounded-xl bg-purple-500 text-white font-bold">Buka Kartu Ekonomi</button>`;
+    } else if (s.step === 'economy_done') {
+      const last = s.lastEconomy;
+      const isLast = s.round >= s.maxRounds;
+      html = `<p class="font-semibold">Hasil Fase Ekonomi ronde ${s.round}:</p>
+        <ul class="text-sm list-disc pl-5 space-y-0.5">${(last ? last.events : []).map(e => `<li>${esc(e)}</li>`).join('')}</ul>
+        <button data-act="next" class="px-5 py-2.5 rounded-xl bg-amber-400 text-slate-950 font-bold">${isLast ? 'Hitung Skor Akhir' : `Lanjut ke Ronde ${s.round + 1}`}</button>`;
+    } else if (s.status === 'ended') {
+      html = `<h2 class="text-xl font-bold text-amber-300">Permainan selesai</h2>
+        <div class="space-y-1">${s.standings.map((r, i) => `<div class="flex justify-between bg-slate-800 rounded-lg px-3 py-1.5"><span>${i + 1}. ${esc(r.name)}</span><b class="font-mono">${r.score}</b></div>`).join('')}</div>`;
+    }
+    $('control').innerHTML = html;
+  }
+
+  function render(s) {
+    $('round').textContent = s.status === 'lobby' ? '-' : `${s.round} / ${s.maxRounds}`;
+    $('step').textContent = STEP_LABEL[s.step] || '';
+    controls(s);
+
+    $('players').innerHTML = s.players.map(p => {
+      const sec = pSecrets[p.uid] || {};
+      const hold = (p.cards || []).reduce((acc, c) => { if (!c.isDebt) acc[c.sector] = (acc[c.sector] || 0) + c.multiplier; return acc; }, {});
+      const holdHtml = Object.entries(hold).map(([k, v]) => `<span class="px-1.5 py-0.5 rounded text-[11px] font-bold" style="background:${SECTOR_COLOR[k]}">${SECTOR_NAME[k]} ${v}</span>`).join(' ');
+      const debts = (p.cards || []).filter(c => c.isDebt).length;
+      const peeks = Object.keys(sec.peek || {}).map(k => SECTOR_NAME[k]);
+      return `<div class="bg-slate-800 rounded-xl p-3">
+        <div class="flex justify-between"><b>#${p.order} ${esc(p.name)}</b><span class="font-mono text-amber-300">${p.coins} Koin</span></div>
+        <div class="flex flex-wrap gap-1 mt-1">${holdHtml || '<span class="text-xs text-slate-400">Tanpa saham</span>'} ${debts ? `<span class="text-xs text-rose-300">🏦 ${debts} hutang</span>` : ''}</div>
+        ${s.step === 'bidding' && sec.bid != null ? `<div class="text-xs text-amber-200 mt-1">Lelang tersembunyi: ${sec.bid} Koin</div>` : ''}
+        ${peeks.length ? `<div class="text-xs text-indigo-300 mt-1">Intip: ${peeks.join(', ')}</div>` : ''}
+      </div>`;
+    }).join('') || '<p class="text-sm text-slate-400">Belum ada pemain.</p>';
+
+    const eco = s.lastEconomy?.revealed || {};
+    $('prices').innerHTML = s.sectorOrder.map(sec => `<div class="bg-slate-800 rounded-lg p-2">
+        <div style="color:${SECTOR_COLOR[sec]}" class="font-bold">${SECTOR_NAME[sec]}</div>
+        <div>Harga <b class="font-mono">${s.prices[sec]}</b> • Sisa Ekonomi ${s.economyLeft[sec] ?? '-'}</div>
+        <div class="text-xs text-slate-400">Terakhir: ${eco[sec] ? esc(fmtDelta(eco[sec])) : '-'}</div></div>`).join('')
+      + `<div class="bg-slate-800 rounded-lg p-2 col-span-2">Reksadana: <b class="font-mono">${s.reksadanaPrice}</b> • Dek aksi: ${s.deckCount} • Buangan: ${s.discard.length}</div>`;
+
+    $('log').innerHTML = s.log.map(l => `<div class="bg-slate-800 rounded px-2 py-1"><span class="text-amber-300 font-mono">R${l.round}</span> ${esc(l.text)}</div>`).join('');
+  }
+
+  if (!code) {
+    message('Buka halaman ini dari beranda setelah membuat ruangan.');
+  } else {
+    const user = await ensureUser();
+    uid = user.uid;
+    subscribeDoc(roomRef(code), r => {
+      if (!r) return message('Ruangan tidak ditemukan.');
+      if (r.bankUid !== uid) return message('Halaman ini hanya untuk bandar ruangan. Buka dari perangkat yang membuat ruangan.');
+      room = r;
+      syncSecrets(r);
+      autoTasks(r);
+      render(r);
+    }, () => message('Tidak bisa membaca ruangan. Periksa kode atau aturan Firestore.'));
+    subscribeDoc(secretRef(code, 'bank'), s => { bankSecret = s || {}; if (room) render(room); }, () => {});
+  }
+</script>
+</body>
+</html>

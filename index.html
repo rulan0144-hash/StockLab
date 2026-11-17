@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>StockLab</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="min-h-screen bg-emerald-950 text-slate-100 flex items-center justify-center p-4">
+  <div class="w-full max-w-md space-y-5">
+    <div class="text-center">
+      <h1 class="text-4xl font-extrabold text-amber-300">StockLab</h1>
+      <p class="text-emerald-200/80 text-sm mt-1">Meja simulasi pasar modal</p>
+    </div>
+
+    <div class="bg-slate-900 rounded-2xl p-5 space-y-3 border border-amber-400/30">
+      <h2 class="font-bold">Bandar: buat ruangan</h2>
+      <p class="text-xs text-slate-400">Anda akan membuka meja bandar. Halaman ini harus tetap terbuka selama permainan.</p>
+      <button id="create" class="w-full py-2.5 rounded-xl bg-amber-400 text-slate-950 font-bold disabled:opacity-50">Buat Ruangan</button>
+    </div>
+
+    <div class="bg-slate-900 rounded-2xl p-5 space-y-3 border border-emerald-500/30">
+      <h2 class="font-bold">Pemain: gabung ruangan</h2>
+      <form id="join-form" class="space-y-2">
+        <input id="join-code" maxlength="5" autocapitalize="characters" placeholder="Kode ruangan (5 karakter)" class="w-full px-3 py-2 rounded-xl bg-slate-800 border border-slate-700 uppercase" required />
+        <input id="join-name" maxlength="20" placeholder="Nama Anda" class="w-full px-3 py-2 rounded-xl bg-slate-800 border border-slate-700" required />
+        <button class="w-full py-2.5 rounded-xl bg-emerald-500 text-slate-950 font-bold disabled:opacity-50">Gabung</button>
+      </form>
+    </div>
+
+    <div class="bg-slate-900 rounded-2xl p-5 space-y-2 border border-slate-700">
+      <h2 class="font-bold">Papan besar (layar bersama)</h2>
+      <div class="flex gap-2">
+        <input id="board-code" maxlength="5" autocapitalize="characters" placeholder="Kode" class="flex-1 px-3 py-2 rounded-xl bg-slate-800 border border-slate-700 uppercase" />
+        <button id="open-board" class="px-4 rounded-xl bg-slate-700 font-bold">Buka</button>
+      </div>
+    </div>
+  </div>
+
+<script type="module">
+  import { createRoom, joinRoom, toast, esc } from './js/app.js';
+
+  document.getElementById('create').onclick = async e => {
+    e.target.disabled = true;
+    try {
+      const code = await createRoom();
+      location.href = `bank.html?code=${code}`;
+    } catch (err) { toast(err.message, 'error'); e.target.disabled = false; }
+  };
+
+  document.getElementById('join-form').onsubmit = async e => {
+    e.preventDefault();
+    const code = document.getElementById('join-code').value.trim().toUpperCase();
+    const name = document.getElementById('join-name').value.trim();
+    try {
+      await joinRoom(code, name);
+      location.href = `player.html?code=${code}`;
+    } catch (err) { toast(err.message, 'error'); }
+  };
+
+  document.getElementById('open-board').onclick = () => {
+    const code = document.getElementById('board-code').value.trim().toUpperCase();
+    if (code) location.href = `board.html?code=${code}`;
+  };
+</script>
+</body>
+</html>

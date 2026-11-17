@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>StockLab • Pemain</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="min-h-screen bg-emerald-950 text-slate-100 p-3 max-w-xl mx-auto">
+  <div id="join" class="hidden space-y-3 mt-10">
+    <h1 class="text-2xl font-extrabold text-amber-300">Gabung StockLab</h1>
+    <p class="text-sm text-slate-300">Masukkan kode ruangan dan nama Anda.</p>
+    <form id="join-form" class="space-y-2">
+      <input id="j-code" maxlength="5" autocapitalize="characters" placeholder="Kode ruangan" class="w-full px-3 py-2 rounded-xl bg-slate-800 uppercase" required />
+      <input id="j-name" maxlength="20" placeholder="Nama Anda" class="w-full px-3 py-2 rounded-xl bg-slate-800" required />
+      <button class="w-full py-2.5 rounded-xl bg-emerald-500 text-slate-950 font-bold">Gabung</button>
+    </form>
+  </div>
+
+  <div id="message" class="hidden mt-10 text-center text-slate-200 bg-black/30 rounded-2xl p-6"></div>
+
+  <div id="table" class="hidden space-y-4">
+    <header class="flex items-center justify-between">
+      <div>
+        <p class="text-xs text-emerald-200/70">Ruangan <b id="code" class="font-mono"></b> • Ronde <b id="round">-</b></p>
+        <h1 class="text-xl font-extrabold text-amber-300" id="name"></h1>
+        <p id="step" class="text-xs text-emerald-100/80"></p>
+      </div>
+      <div class="text-right">
+        <div class="text-[10px] uppercase text-amber-300/80">Koin</div>
+        <div class="font-mono text-2xl font-extrabold text-amber-300" id="coins">0</div>
+        <div class="text-[11px] text-emerald-200/80">Total aset <b id="worth" class="font-mono"></b></div>
+      </div>
+    </header>
+
+    <div id="banner" class="rounded-xl px-4 py-3 text-sm font-semibold bg-black/30 border border-amber-400/30"></div>
+
+    <section id="bid-box" class="hidden bg-black/30 rounded-2xl p-4 space-y-3 border border-amber-400/30">
+      <h2 class="font-bold">Lelang urutan jalan (rahasia)</h2>
+      <p class="text-xs text-emerald-100/80">Pasang koin yang dibayarkan ke bank. Minimal 1 Koin jika punya koin. Tawaran tertinggi mendapat urutan 1.</p>
+      <div class="flex items-center gap-2">
+        <input id="bid-amt" type="number" class="w-28 px-3 py-2 rounded-xl bg-slate-800 font-mono text-lg" />
+        <button id="bid-btn" class="flex-1 py-2.5 rounded-xl bg-amber-400 text-slate-950 font-extrabold">Kunci Lelang</button>
+      </div>
+    </section>
+
+    <section id="action-box" class="hidden bg-black/30 rounded-2xl p-4 space-y-3 border border-amber-400/30">
+      <h2 class="font-bold">Pilih kartu aksi dari meja</h2>
+      <div id="cards" class="grid grid-cols-2 gap-2"></div>
+      <div id="card-panel" class="hidden bg-slate-900 rounded-xl p-3 space-y-3"></div>
+    </section>
+
+    <section id="sell-box" class="hidden bg-black/30 rounded-2xl p-4 space-y-3 border border-amber-400/30">
+      <h2 class="font-bold">Fase Jual</h2>
+      <div id="sell-sectors" class="flex flex-wrap gap-2"></div>
+      <div class="flex items-center gap-2">
+        <input id="sell-qty" type="number" min="1" class="w-24 px-3 py-2 rounded-xl bg-slate-800 font-mono" />
+        <button id="sell-btn" class="flex-1 py-2.5 rounded-xl bg-emerald-500 text-slate-950 font-bold">Jual</button>
+        <button id="hold-btn" class="px-4 py-2.5 rounded-xl bg-slate-700 font-bold">Tahan</button>
+      </div>
+    </section>
+
+    <section class="bg-black/30 rounded-2xl p-4 space-y-2 border border-emerald-500/30">
+      <h2 class="font-bold">Portofolio Anda</h2>
+      <div id="holdings" class="space-y-2"></div>
+      <div id="debt-box" class="space-y-1"></div>
+    </section>
+
+    <section class="bg-black/30 rounded-2xl p-4 space-y-2">
+      <h2 class="font-bold">Pemain lain</h2>
+      <div id="others" class="space-y-1 text-sm"></div>
+    </section>
+
+    <section class="bg-black/30 rounded-2xl p-4 space-y-2">
+      <h2 class="font-bold">Catatan lantai bursa</h2>
+      <div id="peeks" class="space-y-1 text-xs"></div>
+      <div id="log" class="space-y-1 text-xs max-h-64 overflow-y-auto"></div>
+    </section>
+  </div>
+
+<script type="module">
+  import {
+    E, ensureUser, subscribeDoc, roomRef, secretRef, transact, submitBid, joinRoom,
+    toast, esc, SECTOR_NAME, SECTOR_COLOR, ACTION_DESC, STEP_LABEL, fmtDelta,
+  } from './js/app.js';
+  import { updateDoc } from './js/firebase.js';
+
+  const $ = id => document.getElementById(id);
+  const show = (id, on) => $(id).classList.toggle('hidden', !on);
+  const code = (new URLSearchParams(location.search).get('code') || '').toUpperCase();
+
+  let uid = null, room = null, mySecret = {}, selectedCard = null;
+
+  function message(text) { $('message').textContent = text; show('message', true); show('table', false); show('join', false); }
+
+  async function act(fn) {
+    try { await fn(); }
+    catch (e) { toast(e.message, 'error'); }
+  }
+
+  function myPlayer() { return room?.players.find(p => p.uid === uid); }
+
+  function renderCardPanel(card, opt) {
+    const panel = $('card-panel');
+    const others = room.tableCards.filter(c => c.id !== card.id);
+    let extra = '';
+    if (card.action === 'Quickbuy') {
+      const need = Math.min(2, others.length);
+      extra = `<p class="text-xs text-slate-300">Pilih tepat ${need} kartu lain dari meja:</p>
+        <div class="space-y-1">${others.map(c => `<label class="flex items-center gap-2 text-sm"><input type="checkbox" class="qb" value="${c.id}"> ${SECTOR_NAME[c.sector]} • ${c.action}</label>`).join('')}</div>`;
+    } else if (card.action === 'Info Bursa') {
+      extra = `<p class="text-xs text-slate-300">Pilih hingga 3 sektor untuk diintip (rahasia):</p>
+        <div class="flex flex-wrap gap-2">${room.sectorOrder.map(sec => `<label class="flex items-center gap-1 text-sm"><input type="checkbox" class="ib" value="${sec}"> ${SECTOR_NAME[sec]}</label>`).join('')}</div>`;
+    } else if (card.action === 'Akuisisi') {
+      extra = `<p class="text-xs text-slate-300">Pilih lawan sebagai target:</p>
+        <div class="space-y-1">${opt.targets.map(t => `<label class="flex items-center gap-2 text-sm"><input type="radio" name="aq" value="${t.uid}"> ${esc(t.name)} (${t.shares} lembar)</label>`).join('')}</div>`;
+    } else if (card.action === 'Trading Fee') {
+      const owned = myPlayer().cards.filter(c => !c.isDebt).reduce((acc, c) => { acc[c.sector] = (acc[c.sector] || 0) + 1; return acc; }, {});
+      extra = `<p class="text-xs text-slate-300">Setelah bayar fee, boleh jual satu jenis (opsional):</p>
+        <select id="tf-sell" class="w-full px-3 py-2 rounded-xl bg-slate-800"><option value="">Jangan jual</option>
+        ${Object.keys(owned).map(sec => `<option value="${sec}">${SECTOR_NAME[sec]} (${owned[sec]} lembar)</option>`).join('')}</select>`;
+    } else if (card.action === 'Rumor') {
+      extra = `<p class="text-xs text-slate-300">Geser harga sektor:</p>
+        <div class="flex gap-2 items-center"><select id="ru-sec" class="flex-1 px-3 py-2 rounded-xl bg-slate-800">${room.sectorOrder.map(sec => `<option value="${sec}">${SECTOR_NAME[sec]} (${room.prices[sec]})</option>`).join('')}</select>
+        <select id="ru-d" class="px-3 py-2 rounded-xl bg-slate-800"><option value="1">+1</option><option value="-1">-1</option></select></div>`;
+    }
+
+    panel.classList.remove('hidden');
+    panel.innerHTML = `
+      <div class="text-sm"><b>${SECTOR_NAME[card.sector]} • ${card.action}</b></div>
+      <p class="text-xs text-slate-300">${ACTION_DESC[card.action] || ''}</p>
+      ${extra}
+      <div class="grid grid-cols-2 gap-2 pt-1">
+        <button id="do-save" ${opt.canSave ? '' : 'disabled'} class="py-2 rounded-xl bg-emerald-600 font-bold disabled:opacity-40">Simpan${opt.saveFee > 0 ? ` (fee ${opt.saveFee})` : ' (+1 lembar)'}</button>
+        <button id="do-act" ${opt.canActivate ? '' : 'disabled'} class="py-2 rounded-xl bg-amber-500 text-slate-950 font-bold disabled:opacity-40">Aktifkan${opt.activateFee > 0 ? ` (fee ${opt.activateFee})` : ''}</button>
+      </div>
+      <p class="text-[11px] text-rose-300">${!opt.canSave ? esc(opt.saveReason) : ''} ${!opt.canActivate ? esc(opt.activateReason) : ''}</p>`;
+
+    $('do-save').onclick = () => act(() => transact(code, r => E.takeCard(r, uid, { cardId: card.id, mode: 'save' })));
+    $('do-act').onclick = () => {
+      const a = { cardId: card.id, mode: 'activate' };
+      if (card.action === 'Quickbuy') a.cardIds = [...document.querySelectorAll('.qb:checked')].map(x => x.value);
+      if (card.action === 'Info Bursa') a.sectors = [...document.querySelectorAll('.ib:checked')].map(x => x.value);
+      if (card.action === 'Akuisisi') a.targetUid = document.querySelector('input[name=aq]:checked')?.value;
+      if (card.action === 'Trading Fee') a.sellSector = $('tf-sell').value || null;
+      if (card.action === 'Rumor') { a.sector = $('ru-sec').value; a.delta = Number($('ru-d').value); }
+      act(() => transact(code, r => E.takeCard(r, uid, a)));
+    };
+  }
+
+  function render(r) {
+    room = r;
+    const me = myPlayer();
+    if (!me) {
+      if (r.status !== 'lobby') return message('Anda tidak terdaftar di ruangan ini.');
+      show('join', true); show('table', false); show('message', false);
+      $('j-code').value = code;
+      return;
+    }
+    show('join', false); show('message', false); show('table', true);
+
+    $('code').textContent = code;
+    $('name').textContent = me.name;
+    $('round').textContent = r.status === 'lobby' ? '-' : `${r.round} / ${r.maxRounds}`;
+    $('step').textContent = STEP_LABEL[r.step] || '';
+    $('coins').textContent = me.coins;
+    const holdings = E.holdingsOf(r, me);
+    const worth = E.worthOf(r, me);
+    $('worth').textContent = worth;
+
+    const isActor = r.step === 'action' && E.actorId(r) === uid;
+    const isSeller = r.step === 'sell' && E.actorId(r) === uid;
+    let banner = '';
+    if (r.status === 'lobby') banner = 'Menunggu bandar memulai permainan...';
+    else if (r.status === 'ended') banner = `Permainan selesai. Anda di urutan ke-${r.standings.findIndex(x => x.uid === uid) + 1}.`;
+    else if (r.step === 'bidding') banner = me.bidDone ? 'Lelang terkunci. Menunggu pemain lain...' : 'Silakan pasang lelang Anda.';
+    else if (r.step === 'action') banner = isActor ? 'Giliran Anda! Pilih kartu aksi.' : `Menunggu ${r.players.find(p => p.uid === E.actorId(r))?.name || 'pemain'} memilih kartu...`;
+    else if (r.step === 'sell') banner = isSeller ? 'Giliran Anda untuk menjual atau menahan.' : 'Fase jual berjalan...';
+    else if (r.step === 'economy') banner = 'Bandar sedang membuka kartu Ekonomi...';
+    else if (r.step === 'economy_done') banner = 'Hasil Fase Ekonomi sudah keluar. Menunggu bandar melanjutkan.';
+    $('banner').textContent = banner;
+
+    // Lelang
+    const canBid = r.step === 'bidding' && !me.bidDone;
+    show('bid-box', canBid);
+    if (canBid) {
+      const inp = $('bid-amt');
+      inp.min = me.coins >= 1 ? 1 : 0; inp.max = me.coins;
+      if (!inp.dataset.touched) inp.value = inp.min;
+    }
+
+    // Aksi
+    show('action-box', isActor);
+    if (isActor) {
+      const opts = E.options(r, uid);
+      $('cards').innerHTML = r.tableCards.map(c => `
+        <button data-id="${c.id}" class="text-left rounded-xl bg-white text-slate-900 overflow-hidden border-2 ${selectedCard === c.id ? 'ring-2 ring-amber-300' : ''}" style="border-color:${SECTOR_COLOR[c.sector]}">
+          <div class="px-2 py-1 text-white text-xs font-bold" style="background:${SECTOR_COLOR[c.sector]}">${SECTOR_NAME[c.sector]}</div>
+          <div class="p-2 text-sm font-bold">${c.action}</div></button>`).join('');
+      document.querySelectorAll('#cards button').forEach(b => b.onclick = () => { selectedCard = b.dataset.id; render(room); });
+      const sel = r.tableCards.find(c => c.id === selectedCard);
+      if (sel && opts[sel.id]) renderCardPanel(sel, opts[sel.id]);
+      else show('card-panel', false);
+    }
+
+    // Jual
+    show('sell-box', isSeller);
+    if (isSeller) {
+      const owned = holdings.filter(h => h.shares > 0);
+      $('sell-sectors').innerHTML = owned.map((h, i) => `
+        <label class="px-3 py-2 rounded-xl bg-slate-800 text-sm flex items-center gap-2"><input type="radio" name="sec" value="${h.sector}" ${i === 0 ? 'checked' : ''}> ${SECTOR_NAME[h.sector]} (${h.shares} @ ${E.priceOf(r, h.sector)})</label>`).join('')
+        || '<p class="text-sm text-slate-300">Anda tidak punya saham.</p>';
+      $('sell-qty').value = owned[0] ? owned[0].shares : 1;
+    }
+
+    // Portofolio
+    const held = holdings.filter(h => h.shares > 0);
+    $('holdings').innerHTML = held.map(h => `
+      <div class="flex items-center justify-between bg-slate-800 rounded-lg px-3 py-2 text-sm">
+        <span><b style="color:${SECTOR_COLOR[h.sector]}">${SECTOR_NAME[h.sector]}</b> • ${h.shares} lembar${h.split > 1 ? ` <span class="text-emerald-300">×${h.split}</span>` : ''}</span>
+        <span class="font-mono">${h.value} Koin</span></div>`).join('') || '<p class="text-sm text-slate-400">Belum ada saham.</p>';
+    const debts = me.cards.filter(c => c.isDebt).length;
+    $('debt-box').innerHTML = (debts ? `<div class="text-xs text-rose-200">🔒 ${debts} kartu hutang (−${E.DEBT_PENALTY} Koin di akhir)</div>` : '')
+      + (r.status === 'playing' ? me.cards.filter(c => !c.isDebt && c.sector !== 'reksadana').length ? `<div class="pt-2 text-xs text-slate-300">Pinjaman bank (+${E.DEBT_LOAN} Koin, penalti −${E.DEBT_PENALTY}):</div>` : '' : '')
+      + (r.status === 'playing' ? me.cards.filter(c => !c.isDebt && c.sector !== 'reksadana').map(c => `<button data-debt="${c.id}" class="mr-1 mb-1 px-3 py-1.5 rounded-lg bg-rose-800 text-xs font-bold">Balik 1 ${SECTOR_NAME[c.sector]}</button>`).join('') : '');
+    document.querySelectorAll('[data-debt]').forEach(b => b.onclick = () => act(() => transact(code, rr => E.takeDebt(rr, uid, b.dataset.debt))));
+
+    // Pemain lain
+    $('others').innerHTML = r.players.filter(p => p.uid !== uid).map(p =>
+      `<div class="flex justify-between"><span>#${p.order} ${esc(p.name)}</span><span class="font-mono">${p.coins} Koin</span></div>`).join('') || '<p class="text-slate-400">Belum ada pemain lain.</p>';
+
+    // Intipan pribadi dan catatan publik
+    $('peeks').innerHTML = Object.entries(mySecret.peek || {}).map(([sec, c]) =>
+      `<div class="bg-indigo-950 rounded px-2 py-1 text-indigo-200">🔍 Rahasia: ${SECTOR_NAME[sec]} → ${esc(fmtDelta(c))}</div>`).join('');
+    $('log').innerHTML = r.log.map(l => `<div class="bg-black/20 rounded px-2 py-1"><span class="text-amber-300 font-mono">R${l.round}</span> ${esc(l.text)}</div>`).join('');
+  }
+
+  $('bid-amt').oninput = e => { e.target.dataset.touched = '1'; };
+  $('bid-btn').onclick = () => act(() => submitBid(code, uid, myPlayer(), $('bid-amt').value));
+  $('sell-btn').onclick = () => {
+    const sector = document.querySelector('input[name=sec]:checked')?.value;
+    if (!sector) return toast('Pilih sektor dahulu', 'error');
+    act(() => transact(code, r => E.sellSector(r, uid, { sector, qty: Number($('sell-qty').value) || 1 })));
+  };
+  $('hold-btn').onclick = () => act(() => transact(code, r => E.holdSell(r, uid)));
+
+  $('join-form').onsubmit = async e => {
+    e.preventDefault();
+    const jc = $('j-code').value.trim().toUpperCase();
+    try {
+      await joinRoom(jc, $('j-name').value.trim());
+      location.href = `player.html?code=${jc}`;
+    } catch (err) { toast(err.message, 'error'); }
+  };
+
+  if (!code) {
+    show('join', true);
+    $('join').insertAdjacentHTML('afterbegin', '<p class="text-sm text-amber-200">Kode ruangan belum ada di alamat. Masukkan kode dari bandar.</p>');
+  } else {
+    const user = await ensureUser();
+    uid = user.uid;
+    subscribeDoc(roomRef(code), r => {
+      if (!r) return message('Ruangan tidak ditemukan.');
+      render(r);
+    }, () => message('Tidak bisa membaca ruangan. Periksa kode atau aturan Firestore.'));
+    subscribeDoc(secretRef(code, uid), s => { mySecret = s || {}; if (room) render(room); }, () => {});
+  }
+</script>
+</body>
+</html>
