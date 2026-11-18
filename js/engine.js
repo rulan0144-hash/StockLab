@@ -38,15 +38,18 @@ export function shuffle(arr) {
 function buildEconomyDeck() {
   const pool = [];
   const add = (n, card) => { for (let i = 0; i < n; i++) pool.push({ ...card, id: rid() }); };
-  add(6, { name: 'Melaju', delta: 2, purple: null });
-  add(7, { name: 'Menguat', delta: 1, purple: null });
-  add(3, { name: 'Stagnan', delta: 0, purple: null });
+  add(6, { name: 'Merangkak', delta: 1, purple: null });
+  add(4, { name: 'Melaju', delta: 2, purple: null });
   add(5, { name: 'Anjlok', delta: -1, purple: null });
-  add(3, { name: 'Krisis', delta: -2, purple: null });
-  add(2, { name: 'Lonjakan Sektor', delta: 3, purple: 'sector_surge' });
-  add(1, { name: 'Krisis Pasar', delta: 0, purple: 'market_crisis' });
-  add(2, { name: 'Dividen Khusus', delta: 0, purple: 'dividend' });
-  add(1, { name: 'Booming Tengah', delta: 0, purple: 'center_boom' });
+  add(3, { name: 'Terjun', delta: -2, purple: null });
+  add(1, { name: 'Crash', delta: -3, purple: null });
+  add(3, { name: 'Sideways', delta: 0, purple: null });
+  add(2, { name: 'Deviden', delta: 0, purple: 'dividend' });
+  add(2, { name: 'Resesi', delta: 0, purple: 'recession' });
+  add(1, { name: 'Restrukturisasi Ekonomi', delta: 0, purple: 'restructure' });
+  add(1, { name: 'Penerbitan Saham Baru', delta: -1, purple: 'new_issue' });
+  add(1, { name: 'Pajak Jalan', delta: 0, purple: 'road_tax' });
+  add(1, { name: 'Buyback', delta: 1, purple: 'buyback' });
   return shuffle(pool); // 30 kartu
 }
 
@@ -442,22 +445,41 @@ export function revealEconomy(room, secret) {
     totals[sec] += card.delta;
   }
   const events = [];
+  const cards = room.sectorOrder.map(sec => revealed[sec]);
+  const has = k => cards.some(c => c.purple === k);
+  room.sectorOrder.forEach(sec => events.push(`${SHORT[sec]}: ${revealed[sec].name}${revealed[sec].delta ? ` (${revealed[sec].delta > 0 ? '+' : ''}${revealed[sec].delta})` : ''}`));
+
+  if (has('restructure')) {
+    // Semua harga kembali ke awal; efek kartu Ekonomi lain dibatalkan.
+    room.sectorOrder.forEach(sec => setPos(room, sec, startPos(sec)));
+    events.push('Restrukturisasi Ekonomi: semua harga kembali ke Harga Awal, efek kartu lain dibatalkan.');
+    room.lastEconomy = { round: room.round, revealed: Object.fromEntries(Object.entries(revealed).map(([s, c]) => [s, { name: c.name, delta: c.delta, purple: c.purple }])), events };
+    room.economyLeft = countEconomy(room, secret);
+    room.step = 'economy_done';
+    events.forEach(e => log(room, e));
+    return;
+  }
+  // Resesi diterapkan lebih dulu: saham di atas Harga Awal turun 1 poin.
+  if (has('recession')) {
+    room.sectorOrder.forEach(sec => { if (room.pos[sec] > startPos(sec)) setPos(room, sec, room.pos[sec] - 1); });
+    events.push('Resesi: semua saham di atas Harga Awal turun 1 poin.');
+  }
+  const after = [];
   for (const sec of room.sectorOrder) {
     const card = revealed[sec];
-    events.push(`${SHORT[sec]}: ${card.name} (${card.delta > 0 ? '+' : ''}${card.delta})`);
     if (card.purple === 'dividend') {
       for (const p of room.players) {
         const sh = shares(p, sec);
-        if (sh > 0) { p.coins += sh * 2; events.push(`Dividen Khusus ${SHORT[sec]}: ${p.name} +${sh * 2} Koin`); }
+        if (sh > 0) { p.coins += sh; events.push(`Deviden ${SHORT[sec]}: ${p.name} +${sh} Koin`); }
       }
-    } else if (card.purple === 'market_crisis') {
-      room.sectorOrder.forEach(s => { totals[s] -= 1; });
-      events.push('Krisis Pasar: seluruh 4 sektor -1');
-    } else if (card.purple === 'center_boom') {
-      totals[room.sectorOrder[1]] += 2;
-      totals[room.sectorOrder[2]] += 2;
-      events.push('Booming Tengah: dua sektor tengah +2');
-    }
+    } else if (card.purple === 'road_tax') {
+      room.players.forEach(p => { const t = Math.min(p.coins, p.order); p.coins -= t; events.push(`Pajak Jalan: ${p.name} bayar ${t} Koin (urutan #${p.order})`); });
+    } else if (card.purple === 'new_issue') {
+      room.players.forEach(p => {
+        const own = activeCards(p, sec);
+        if (own.length) { const c = own.reduce((m, x) => (x.multiplier < m.multiplier ? x : m)); c.multiplier *= 2; events.push(`Penerbitan Saham Baru ${SHORT[sec]}: ${p.name} dapat saham tambahan`); }
+      });
+    } else if (card.purple === 'buyback') after.push(sec);
   }
   for (const sec of room.sectorOrder) {
     const next = room.pos[sec] + totals[sec];
@@ -476,6 +498,14 @@ export function revealEconomy(room, secret) {
     } else {
       setPos(room, sec, next);
     }
+  }
+  for (const sec of after) {
+    room.players.forEach(p => {
+      const n = activeCards(p, sec).length;
+      if (n) { const r = sellCards(room, p, sec, n); events.push(`Buyback ${SHORT[sec]}: ${p.name} jual semua, +${r} Koin`); }
+    });
+    setPos(room, sec, startPos(sec));
+    events.push(`Buyback ${SHORT[sec]}: harga kembali ${START_PRICE}.`);
   }
   room.lastEconomy = {
     round: room.round,
