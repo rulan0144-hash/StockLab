@@ -82,12 +82,20 @@ function playOne() {
       for (const uid in peeks) ps[uid] = { ...ps[uid], peek: peeks[uid] };
       E.revealEconomy(room, secret);
     } else if (room.step === 'economy_done') {
+      for (const p of room.players) {
+        while (p.owe > 0) {
+          const flip = p.cards.find(c => !c.isDebt && c.sector !== 'reksadana');
+          const sold = p.cards.find(c => !c.isDebt);
+          if (flip && Math.random() < 0.5) E.takeDebt(room, p.uid, flip.id);
+          else E.sellOwe(room, p.uid, { sector: sold.sector });
+        }
+      }
       E.nextRound(room, secret, ps);
     }
 
     // Invarian
     for (const p of room.players) {
-      if (p.coins < -10) throw new Error(`Koin terlalu negatif: ${p.coins}`);
+      if (p.coins < 0) throw new Error(`Koin negatif: ${p.coins}`);
     }
     for (const sec of E.SECTORS) {
       const pr = room.prices[sec];

@@ -63,6 +63,7 @@
     <section class="bg-black/30 rounded-2xl p-4 space-y-2 border border-emerald-500/30">
       <h2 class="font-bold">Portofolio Anda</h2>
       <div id="holdings" class="space-y-2"></div>
+      <div id="owe-box" class="hidden bg-rose-950 border border-rose-500 rounded-xl p-3 space-y-2"></div>
       <div id="debt-box" class="space-y-1"></div>
     </section>
 
@@ -190,7 +191,7 @@
     else if (r.step === 'action') banner = isActor ? 'Giliran Anda! Pilih kartu aksi.' : `Menunggu ${r.players.find(p => p.uid === E.actorId(r))?.name || 'pemain'} memilih kartu...`;
     else if (r.step === 'sell') banner = isSeller ? 'Giliran Anda untuk menjual atau menahan.' : 'Fase jual berjalan...';
     else if (r.step === 'economy') banner = 'Bandar sedang membuka kartu Ekonomi...';
-    else if (r.step === 'economy_done') banner = 'Hasil Fase Ekonomi sudah keluar. Menunggu bandar melanjutkan.';
+    else if (r.step === 'economy_done') banner = me.owe > 0 ? 'Anda harus melunasi Pajak Jalan.' : 'Hasil Fase Ekonomi sudah keluar. Menunggu bandar melanjutkan.';
     $('banner').textContent = banner;
 
     // Lelang
@@ -224,6 +225,16 @@
         <label class="px-3 py-2 rounded-xl bg-slate-800 text-sm flex items-center gap-2"><input type="radio" name="sec" value="${h.sector}" ${i === 0 ? 'checked' : ''}> ${SECTOR_NAME[h.sector]} (${h.shares} @ ${E.priceOf(r, h.sector)})</label>`).join('')
         || '<p class="text-sm text-slate-300">Anda tidak punya saham.</p>';
       $('sell-qty').value = owned[0] ? owned[0].shares : 1;
+    }
+
+    // Kewajiban Pajak Jalan
+    const owing = r.step === 'economy_done' && me.owe > 0;
+    show('owe-box', owing);
+    if (owing) {
+      $('owe-box').innerHTML = `<div class="text-sm font-bold text-rose-200">Pajak Jalan: Anda masih kurang ${me.owe} Koin.</div>
+        <div class="text-xs text-rose-200/80">Balik 1 kartu saham (+${E.DEBT_LOAN} Koin) atau jual saham.</div>`
+        + holdings.filter(h => h.shares > 0).map(h => `<button data-owe="${h.sector}" class="mr-1 mb-1 px-3 py-1.5 rounded-lg bg-slate-700 text-xs font-bold">Jual 1 ${SECTOR_NAME[h.sector]} (@${E.priceOf(r, h.sector)})</button>`).join('');
+      document.querySelectorAll('[data-owe]').forEach(b => b.onclick = () => act(() => transact(code, rr => E.sellOwe(rr, uid, { sector: b.dataset.owe }))));
     }
 
     // Portofolio

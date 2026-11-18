@@ -159,8 +159,30 @@ export function dealRound(room, secret, ps) {
   log(room, `Ronde ${room.round}: ${room.tableCards.length} kartu aksi dibuka. Ajukan lelang tertutup.`);
 }
 
+// Kewajiban bayar yang melebihi saldo: pemain harus membalik kartu (+10) atau menjual saham.
+function settleOwe(p) {
+  const pay = Math.min(p.coins, p.owe || 0);
+  p.coins -= pay; p.owe = (p.owe || 0) - pay;
+  forgiveIfBroke(p);
+}
+function forgiveIfBroke(p) {
+  if ((p.owe || 0) > 0 && !p.cards.some(c => !c.isDebt)) p.owe = 0; // tidak ada lagi yang bisa dijual/dibalik
+}
+export function sellOwe(room, uid, a) {
+  if (room.step !== 'economy_done') throw new Error('Tidak ada kewajiban bayar saat ini');
+  const p = findPlayer(room, uid);
+  if (!(p.owe > 0)) throw new Error('Anda tidak punya kewajiban bayar');
+  const sec = a.sector;
+  if (!ALL.includes(sec) || !activeCards(p, sec).length) throw new Error('Anda tidak punya lembar sektor ini');
+  const rev = sellCards(room, p, sec, 1);
+  log(room, `${p.name} menjual 1 kartu ${SHORT[sec]} (+${rev} Koin) untuk membayar kewajiban.`);
+  settleOwe(p);
+}
+
 export function nextRound(room, secret, ps) {
   if (room.step !== 'economy_done') throw new Error('Selesaikan Fase Ekonomi terlebih dahulu');
+  const owing = room.players.filter(p => p.owe > 0);
+  if (owing.length) throw new Error(`Menunggu ${owing.map(p => p.name).join(', ')} melunasi Pajak Jalan`);
   if (room.round >= MAX_ROUNDS) return finish(room);
   room.round += 1;
   dealRound(room, secret, ps);
@@ -410,7 +432,7 @@ export function holdSell(room, uid) {
 }
 
 export function takeDebt(room, uid, cardId) {
-  if (!['bidding', 'action', 'sell'].includes(room.step)) throw new Error('Pinjaman tidak tersedia saat ini');
+  if (!['bidding', 'action', 'sell', 'economy_done'].includes(room.step)) throw new Error('Pinjaman tidak tersedia saat ini');
   const p = findPlayer(room, uid);
   const card = p.cards.find(c => c.id === cardId && !c.isDebt);
   if (!card) throw new Error('Kartu tidak ditemukan');
@@ -418,6 +440,7 @@ export function takeDebt(room, uid, cardId) {
   card.isDebt = true;
   card.multiplier = 1;
   p.coins += DEBT_LOAN;
+  settleOwe(p);
   log(room, `${p.name} membalik 1 kartu ${SHORT[card.sector]} untuk pinjaman ${DEBT_LOAN} Koin.`);
 }
 
@@ -474,7 +497,12 @@ export function revealEconomy(room, secret) {
         if (sh > 0) { p.coins += sh; events.push(`Deviden ${SHORT[sec]}: ${p.name} +${sh} Koin`); }
       }
     } else if (card.purple === 'road_tax') {
-      room.players.forEach(p => { const t = p.order; p.coins -= t; events.push(`Pajak Jalan: ${p.name} bayar ${t} Koin (urutan #${p.order})`); });
+      room.players.forEach(p => {
+        const t = Math.min(p.coins, p.order); p.coins -= t;
+        p.owe = (p.owe || 0) + (p.order - t);
+        events.push(`Pajak Jalan: ${p.name} bayar ${t} Koin (urutan #${p.order})${p.order > t ? ` — kurang ${p.order - t}, harus balik kartu/jual saham` : ''}`);
+        forgiveIfBroke(p);
+      });
     } else if (card.purple === 'new_issue') {
       room.players.forEach(p => {
         const own = activeCards(p, sec);
