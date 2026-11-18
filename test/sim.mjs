@@ -85,9 +85,7 @@ function playOne() {
       for (const p of room.players) {
         while (p.owe > 0) {
           const flip = p.cards.find(c => !c.isDebt && c.sector !== 'reksadana');
-          const sold = p.cards.find(c => !c.isDebt);
-          if (flip && Math.random() < 0.5) E.takeDebt(room, p.uid, flip.id);
-          else E.sellOwe(room, p.uid, { sector: sold.sector });
+          E.takeDebt(room, p.uid, flip.id);
         }
       }
       E.nextRound(room, secret, ps);

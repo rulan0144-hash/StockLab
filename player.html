@@ -232,9 +232,7 @@
     show('owe-box', owing);
     if (owing) {
       $('owe-box').innerHTML = `<div class="text-sm font-bold text-rose-200">Pajak Jalan: Anda masih kurang ${me.owe} Koin.</div>
-        <div class="text-xs text-rose-200/80">Balik 1 kartu saham (+${E.DEBT_LOAN} Koin) atau jual saham.</div>`
-        + holdings.filter(h => h.shares > 0).map(h => `<button data-owe="${h.sector}" class="mr-1 mb-1 px-3 py-1.5 rounded-lg bg-slate-700 text-xs font-bold">Jual 1 ${SECTOR_NAME[h.sector]} (@${E.priceOf(r, h.sector)})</button>`).join('');
-      document.querySelectorAll('[data-owe]').forEach(b => b.onclick = () => act(() => transact(code, rr => E.sellOwe(rr, uid, { sector: b.dataset.owe }))));
+        <div class="text-xs text-rose-200/80">Pinjam dengan membalik 1 kartu saham (+${E.DEBT_LOAN} Koin) di bagian Pinjaman bank di bawah.</div>`;
     }
 
     // Portofolio

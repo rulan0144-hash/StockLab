@@ -166,19 +166,8 @@ function settleOwe(p) {
   forgiveIfBroke(p);
 }
 function forgiveIfBroke(p) {
-  if ((p.owe || 0) > 0 && !p.cards.some(c => !c.isDebt)) p.owe = 0; // tidak ada lagi yang bisa dijual/dibalik
+  if ((p.owe || 0) > 0 && !p.cards.some(c => !c.isDebt && c.sector !== 'reksadana')) p.owe = 0; // tidak ada kartu yang bisa dibalik
 }
-export function sellOwe(room, uid, a) {
-  if (room.step !== 'economy_done') throw new Error('Tidak ada kewajiban bayar saat ini');
-  const p = findPlayer(room, uid);
-  if (!(p.owe > 0)) throw new Error('Anda tidak punya kewajiban bayar');
-  const sec = a.sector;
-  if (!ALL.includes(sec) || !activeCards(p, sec).length) throw new Error('Anda tidak punya lembar sektor ini');
-  const rev = sellCards(room, p, sec, 1);
-  log(room, `${p.name} menjual 1 kartu ${SHORT[sec]} (+${rev} Koin) untuk membayar kewajiban.`);
-  settleOwe(p);
-}
-
 export function nextRound(room, secret, ps) {
   if (room.step !== 'economy_done') throw new Error('Selesaikan Fase Ekonomi terlebih dahulu');
   const owing = room.players.filter(p => p.owe > 0);
@@ -500,7 +489,7 @@ export function revealEconomy(room, secret) {
       room.players.forEach(p => {
         const t = Math.min(p.coins, p.order); p.coins -= t;
         p.owe = (p.owe || 0) + (p.order - t);
-        events.push(`Pajak Jalan: ${p.name} bayar ${t} Koin (urutan #${p.order})${p.order > t ? ` — kurang ${p.order - t}, harus balik kartu/jual saham` : ''}`);
+        events.push(`Pajak Jalan: ${p.name} bayar ${t} Koin (urutan #${p.order})${p.order > t ? ` — kurang ${p.order - t}, harus meminjam (balik kartu)` : ''}`);
         forgiveIfBroke(p);
       });
     } else if (card.purple === 'new_issue') {
