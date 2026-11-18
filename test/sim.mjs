@@ -53,7 +53,7 @@ function playOne() {
         } else if (card.action === 'Info Bursa') {
           a.sectors = [...room.sectorOrder].slice(0, 3);
         } else if (card.action === 'Akuisisi') {
-          a.targetUid = o.targets[0].uid;
+          a.targetUid = o.targets[0].uid; a.targetSector = o.targets[0].sector;
         } else if (card.action === 'Trading Fee') {
           a.sellSector = E.ALL[rnd(5)];
         } else if (card.action === 'Rumor') {

@@ -204,13 +204,21 @@ export function resolveBidding(room, bids) {
 }
 
 // ---------- aksi pemain ----------
-function acquisitionTargets(room, p, sec) {
-  if (sec === 'reksadana') return [];
-  const mine = shares(p, sec);
-  return room.players
-    .filter(o => o.uid !== p.uid)
-    .map(o => ({ uid: o.uid, name: o.name, shares: shares(o, sec) }))
-    .filter(o => o.shares >= 1 && mine >= o.shares);
+// Target Akuisisi: { uid, name, sector, shares }. Kartu sektor biasa hanya menargetkan sektornya sendiri.
+// Kartu Akuisisi Reksadana boleh menargetkan saham sektor apa pun milik lawan.
+// Syarat: saham pengakuisi di sektor itu lebih banyak atau sama dengan lawan. Reksadana tidak bisa diambil.
+function acquisitionTargets(room, p, cardSector) {
+  const secs = cardSector === 'reksadana' ? SECTORS : [cardSector];
+  const out = [];
+  for (const sec of secs) {
+    const mine = shares(p, sec);
+    for (const o of room.players) {
+      if (o.uid === p.uid) continue;
+      const theirs = shares(o, sec);
+      if (theirs >= 1 && mine >= theirs) out.push({ uid: o.uid, name: o.name, sector: sec, shares: theirs });
+    }
+  }
+  return out;
 }
 
 export function evaluate(room, p, card) {
@@ -307,17 +315,18 @@ export function takeCard(room, uid, a) {
       break;
     }
     case 'Akuisisi': {
-      const target = opt.targets.find(t => t.uid === a.targetUid);
+      const wantSec = card.sector === 'reksadana' ? a.targetSector : card.sector;
+      const target = opt.targets.find(t => t.uid === a.targetUid && t.sector === wantSec);
       if (!target) throw new Error('Pilih target yang memenuhi syarat');
       const t = findPlayer(room, target.uid);
-      const pool = t.cards.filter(c => !c.isDebt && c.sector === card.sector).sort((x, y) => x.multiplier - y.multiplier);
+      const pool = t.cards.filter(c => !c.isDebt && c.sector === target.sector).sort((x, y) => x.multiplier - y.multiplier);
       const taken = pool[0];
       removeFromTable(room, card.id);
       room.discard.unshift(card);
       t.cards = t.cards.filter(c => c.id !== taken.id);
       p.cards.push(taken);
       t.coins += ACQ_BONUS;
-      log(room, `${p.name} mengakuisisi 1 ${SHORT[card.sector]} dari ${t.name} (${t.name} +${ACQ_BONUS} Koin).`);
+      log(room, `${p.name} mengakuisisi 1 ${SHORT[target.sector]} dari ${t.name} (${t.name} +${ACQ_BONUS} Koin).`);
       break;
     }
     case 'Trading Fee': {

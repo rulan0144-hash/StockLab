@@ -112,7 +112,7 @@
         <div class="flex flex-wrap gap-2">${room.sectorOrder.map(sec => `<label class="flex items-center gap-1 text-sm"><input type="checkbox" class="ib" value="${sec}"> ${SECTOR_NAME[sec]}</label>`).join('')}</div>`;
     } else if (card.action === 'Akuisisi') {
       extra = `<p class="text-xs text-slate-300">Pilih lawan sebagai target:</p>
-        <div class="space-y-1">${opt.targets.map(t => `<label class="flex items-center gap-2 text-sm"><input type="radio" name="aq" value="${t.uid}"> ${esc(t.name)} (${t.shares} lembar)</label>`).join('')}</div>`;
+        <div class="space-y-1">${opt.targets.map(t => `<label class="flex items-center gap-2 text-sm"><input type="radio" name="aq" value="${t.uid}|${t.sector}"> ${esc(t.name)} • ${SECTOR_NAME[t.sector]} (${t.shares} lembar)</label>`).join('')}</div>`;
     } else if (card.action === 'Trading Fee') {
       const owned = myPlayer().cards.filter(c => !c.isDebt).reduce((acc, c) => { acc[c.sector] = (acc[c.sector] || 0) + 1; return acc; }, {});
       extra = `<p class="text-xs text-slate-300">Setelah bayar fee, boleh jual satu jenis (opsional):</p>
@@ -150,7 +150,7 @@
       const a = { cardId: card.id, mode: 'activate' };
       if (card.action === 'Quickbuy') a.cardIds = [...document.querySelectorAll('.qb:checked')].map(x => x.value);
       if (card.action === 'Info Bursa') a.sectors = [...document.querySelectorAll('.ib:checked')].map(x => x.value);
-      if (card.action === 'Akuisisi') a.targetUid = document.querySelector('input[name=aq]:checked')?.value;
+      if (card.action === 'Akuisisi') { const [u, sc] = (document.querySelector('input[name=aq]:checked')?.value || '|').split('|'); a.targetUid = u; a.targetSector = sc; }
       if (card.action === 'Trading Fee') a.sellSector = $('tf-sell').value || null;
       if (card.action === 'Rumor') {
         a.changes = $('ru-mode').value === 'one'
