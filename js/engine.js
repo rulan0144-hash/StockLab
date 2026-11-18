@@ -204,11 +204,11 @@ export function resolveBidding(room, bids) {
 }
 
 // ---------- aksi pemain ----------
-// Target Akuisisi: { uid, name, sector, shares }. Kartu sektor biasa hanya menargetkan sektornya sendiri.
-// Kartu Akuisisi Reksadana boleh menargetkan saham sektor apa pun milik lawan.
-// Syarat: saham pengakuisi di sektor itu lebih banyak atau sama dengan lawan. Reksadana tidak bisa diambil.
-function acquisitionTargets(room, p, cardSector) {
-  const secs = cardSector === 'reksadana' ? SECTORS : [cardSector];
+// Target Akuisisi: { uid, name, sector, shares }. Sektor kartu Akuisisi tidak membatasi: semua kartu Akuisisi
+// boleh mengambil saham sektor apa pun milik lawan (Reksadana tidak bisa diambil).
+// Syarat: saham pengakuisi di sektor target lebih banyak atau sama dengan lawan.
+function acquisitionTargets(room, p) {
+  const secs = SECTORS;
   const out = [];
   for (const sec of secs) {
     const mine = shares(p, sec);
@@ -226,7 +226,7 @@ export function evaluate(room, p, card) {
   // Trading Fee: dibayar saat mengambil kartu, 1 Koin per saham sektor ini yang dimiliki (termasuk kartu ini)
   const saveFee = card.action === 'Trading Fee' ? owned + 1 : 0;
   const activateFee = saveFee;
-  const targets = card.action === 'Akuisisi' ? acquisitionTargets(room, p, card.sector) : [];
+  const targets = card.action === 'Akuisisi' ? acquisitionTargets(room, p) : [];
   const others = room.tableCards.filter(c => c.id !== card.id);
   // Anti-buntu: jika tidak ada langkah legal sama sekali, simpan tetap diizinkan
   const anyLegal = room.tableCards.some(c => {
@@ -315,8 +315,7 @@ export function takeCard(room, uid, a) {
       break;
     }
     case 'Akuisisi': {
-      const wantSec = card.sector === 'reksadana' ? a.targetSector : card.sector;
-      const target = opt.targets.find(t => t.uid === a.targetUid && t.sector === wantSec);
+      const target = opt.targets.find(t => t.uid === a.targetUid && t.sector === a.targetSector);
       if (!target) throw new Error('Pilih target yang memenuhi syarat');
       const t = findPlayer(room, target.uid);
       const pool = t.cards.filter(c => !c.isDebt && c.sector === target.sector).sort((x, y) => x.multiplier - y.multiplier);
