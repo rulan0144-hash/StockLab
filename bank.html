@@ -5,8 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>StockLab • Bandar</title>
   <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="css/theme.css" />
 </head>
-<body class="min-h-screen bg-slate-950 text-slate-100 p-3 sm:p-5">
+<body class="felt min-h-screen   p-3 sm:p-5">
   <header class="flex flex-wrap items-center justify-between gap-2 mb-4">
     <div>
       <h1 class="text-2xl font-extrabold text-amber-300">Meja Bandar <span class="text-xs text-slate-400">(bank)</span></h1>
@@ -167,7 +168,7 @@
         <div style="color:${SECTOR_COLOR[sec]}" class="font-bold">${SECTOR_NAME[sec]}</div>
         <div>Harga <b class="font-mono">${s.prices[sec]}</b> • Sisa Ekonomi ${s.economyLeft[sec] ?? '-'}</div>
         <div class="text-xs text-slate-400">Terakhir: ${eco[sec] ? esc(fmtDelta(eco[sec])) : '-'}</div></div>`).join('')
-      + `<div class="bg-slate-800 rounded-lg p-2 col-span-2">Reksadana: <b class="font-mono">${s.reksadanaPrice}</b> • Dek aksi: ${s.deckCount} • Buangan: ${s.discard.length}</div>`;
+      + `<div class="bg-slate-800 rounded-lg p-2 col-span-2">Reksadana: <b class="font-mono">${E.priceOf(s, "reksadana")}</b> • Dek aksi: ${s.deckCount} • Buangan: ${s.discard.length}</div>`;
 
     $('log').innerHTML = s.log.map(l => `<div class="bg-slate-800 rounded px-2 py-1"><span class="text-amber-300 font-mono">R${l.round}</span> ${esc(l.text)}</div>`).join('');
   }
