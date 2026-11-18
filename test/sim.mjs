@@ -40,8 +40,16 @@ function playOne() {
       E.resolveBidding(room, Object.fromEntries(room.players.map(p => [p.uid, ps[p.uid].bid])));
     } else if (room.step === 'action') {
       const uid = E.actorId(room);
-      const opts = E.options(room, uid);
-      const legal = room.tableCards.filter(c => opts[c.id].canSave || opts[c.id].canActivate);
+      let opts = E.options(room, uid);
+      let legal = room.tableCards.filter(c => opts[c.id].canSave || opts[c.id].canActivate);
+      while (!legal.length) {
+        const pl = E.findPlayer(room, uid);
+        const flip = pl.cards.find(c => !c.isDebt && c.sector !== 'reksadana');
+        if (!flip) break;
+        E.takeDebt(room, uid, flip.id);
+        opts = E.options(room, uid);
+        legal = room.tableCards.filter(c => opts[c.id].canSave || opts[c.id].canActivate);
+      }
       if (!legal.length) throw new Error('Tidak ada langkah legal (seharusnya tidak terjadi)');
       const card = legal[rnd(legal.length)];
       const o = opts[card.id];

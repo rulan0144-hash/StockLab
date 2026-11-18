@@ -242,9 +242,11 @@
         <span><b style="color:${SECTOR_COLOR[h.sector]}">${SECTOR_NAME[h.sector]}</b> • ${h.shares} lembar${h.split > 1 ? ` <span class="text-emerald-300">×${h.split}</span>` : ''}</span>
         <span class="font-mono">${h.value} Koin</span></div>`).join('') || '<p class="text-sm text-slate-400">Belum ada saham.</p>';
     const debts = me.cards.filter(c => c.isDebt).length;
-    $('debt-box').innerHTML = (debts ? `<div class="text-xs text-rose-200">🔒 ${debts} kartu hutang (−${E.DEBT_PENALTY} Koin di akhir)</div>` : '')
-      + (r.status === 'playing' ? me.cards.filter(c => !c.isDebt && c.sector !== 'reksadana').length ? `<div class="pt-2 text-xs text-slate-300">Pinjaman bank (+${E.DEBT_LOAN} Koin, penalti −${E.DEBT_PENALTY}):</div>` : '' : '')
-      + (r.status === 'playing' ? me.cards.filter(c => !c.isDebt && c.sector !== 'reksadana').map(c => `<button data-debt="${c.id}" class="mr-1 mb-1 px-3 py-1.5 rounded-lg bg-rose-800 text-xs font-bold">Balik 1 ${SECTOR_NAME[c.sector]}</button>`).join('') : '');
+    const flippable = me.cards.filter(c => !c.isDebt && c.sector !== 'reksadana');
+    $('debt-box').className = r.status === 'playing' ? 'rounded-xl border border-rose-500/60 bg-rose-950/60 p-3 space-y-2' : 'hidden';
+    $('debt-box').innerHTML = `<div class="text-sm font-bold text-rose-200">🏦 Pinjam Koin</div>
+      <div class="text-xs text-rose-200/80">Balik 1 kartu saham: +${E.DEBT_LOAN} Koin sekarang, −${E.DEBT_PENALTY} Koin di akhir.${debts ? ` Hutang Anda: ${debts} kartu.` : ''} Dipakai kapan pun Koin kurang untuk membayar kewajiban apa pun.</div>`
+      + (flippable.length ? flippable.map(c => `<button data-debt="${c.id}" class="mr-1 mb-1 px-3 py-1.5 rounded-lg bg-rose-700 text-xs font-bold">Pinjam: balik 1 ${SECTOR_NAME[c.sector]}</button>`).join('') : '<div class="text-xs text-slate-300">Tidak ada kartu saham yang bisa dibalik.</div>');
     document.querySelectorAll('[data-debt]').forEach(b => b.onclick = () => act(() => transact(code, rr => E.takeDebt(rr, uid, b.dataset.debt))));
 
     // Pemain lain

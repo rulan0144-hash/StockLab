@@ -248,13 +248,14 @@ export function evaluate(room, p, card) {
     const f = c.action === 'Trading Fee' ? shares(p, c.sector) + 1 : 0;
     return p.coins >= f;
   });
-  const canSave = p.coins >= saveFee || !anyLegal;
+  const canBorrow = p.cards.some(c => !c.isDebt && c.sector !== 'reksadana');
+  const canSave = p.coins >= saveFee || (!anyLegal && !canBorrow);
   let canActivate = true, activateReason = '';
-  if (card.action === 'Trading Fee' && p.coins < activateFee) { canActivate = false; activateReason = `Butuh ${activateFee} Koin untuk fee`; }
+  if (card.action === 'Trading Fee' && p.coins < activateFee) { canActivate = false; activateReason = `Butuh ${activateFee} Koin untuk fee. Koin kurang: pinjam dulu.`; }
   else if (card.action === 'Quickbuy' && others.length === 0) { canActivate = false; activateReason = 'Tidak ada kartu lain di meja'; }
   else if (card.action === 'Akuisisi' && targets.length === 0) { canActivate = false; activateReason = 'Tidak ada lawan yang memenuhi syarat'; }
   return {
-    saveFee, canSave, saveReason: canSave ? '' : `Butuh ${saveFee} Koin untuk fee`,
+    saveFee, canSave, saveReason: canSave ? '' : `Butuh ${saveFee} Koin untuk fee. Koin kurang: pinjam dulu.`,
     activateFee, canActivate, activateReason, targets,
   };
 }
@@ -523,6 +524,7 @@ export function revealEconomy(room, secret) {
       if (n) { const r = sellCards(room, p, sec, n); events.push(`Buyback ${SHORT[sec]}: ${p.name} jual semua, +${r} Koin`); }
     });
     setPos(room, sec, startPos(sec));
+    room.players.forEach(forgiveIfBroke);
     events.push(`Buyback ${SHORT[sec]}: harga kembali ${START_PRICE}.`);
   }
   room.lastEconomy = {
