@@ -10,11 +10,11 @@ export const secretRef = (code, id) => doc(db, 'rooms', code, 'secret', id);
 export const SECTOR_NAME = { konsumer: 'Konsumer', keuangan: 'Keuangan', tambang: 'Tambang', agrikultur: 'Agrikultur', reksadana: 'Reksadana' };
 export const SECTOR_COLOR = { konsumer: '#2563eb', keuangan: '#d97706', tambang: '#e11d48', agrikultur: '#059669', reksadana: '#0d9488' };
 export const ACTION_DESC = {
-  'Quickbuy': 'Ambil & simpan 2 kartu aksi dari meja, lalu giliran berakhir.',
-  'Info Bursa': 'Intip rahasia kartu Ekonomi teratas dari hingga 3 sektor.',
-  'Akuisisi': 'Ambil 1 saham sektor ini dari lawan (saham Anda ≥ saham target). Target dapat +4 Koin.',
-  'Trading Fee': 'Bayar 1 Koin per saham sektor ini, lalu boleh jual seluruh 1 jenis sektor.',
-  'Rumor': 'Geser harga 1 sektor saham +1 atau -1.',
+  'Quickbuy': 'Ambil kartu ini dan 1 kartu lain dari meja, keduanya jadi saham Anda. Kartu kedua tanpa efek. Giliran Anda berikutnya di ronde ini hangus.',
+  'Info Bursa': 'Intip kartu Ekonomi paling atas dari tepat 3 sektor saham (rahasia).',
+  'Akuisisi': 'Ambil 1 kartu saham dari lawan (non-Reksadana). Saham Anda harus lebih banyak atau sama. Lawan dapat +4 Koin.',
+  'Trading Fee': 'Bayar 1 Koin per saham sektor ini termasuk kartu ini. Boleh langsung jual semua saham 1 jenis.',
+  'Rumor': 'Pilih 2 sektor berbeda, masing-masing naik atau turun 1 poin.',
 };
 export const STEP_LABEL = {
   lobby: 'Menunggu pemain', bidding: 'Fase I • Lelang', action: 'Fase II • Aksi', sell: 'Fase III • Jual',

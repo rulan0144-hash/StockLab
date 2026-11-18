@@ -105,11 +105,10 @@
     const others = room.tableCards.filter(c => c.id !== card.id);
     let extra = '';
     if (card.action === 'Quickbuy') {
-      const need = Math.min(2, others.length);
-      extra = `<p class="text-xs text-slate-300">Pilih tepat ${need} kartu lain dari meja:</p>
-        <div class="space-y-1">${others.map(c => `<label class="flex items-center gap-2 text-sm"><input type="checkbox" class="qb" value="${c.id}"> ${SECTOR_NAME[c.sector]} • ${c.action}</label>`).join('')}</div>`;
+      extra = `<p class="text-xs text-slate-300">Pilih tepat 1 kartu lain dari meja (kartu ini ikut Anda ambil):</p>
+        <div class="space-y-1">${others.map(c => `<label class="flex items-center gap-2 text-sm"><input type="radio" name="qb" class="qb" value="${c.id}"> ${SECTOR_NAME[c.sector]} • ${c.action}</label>`).join('')}</div>`;
     } else if (card.action === 'Info Bursa') {
-      extra = `<p class="text-xs text-slate-300">Pilih hingga 3 sektor untuk diintip (rahasia):</p>
+      extra = `<p class="text-xs text-slate-300">Pilih tepat 3 sektor untuk diintip (rahasia):</p>
         <div class="flex flex-wrap gap-2">${room.sectorOrder.map(sec => `<label class="flex items-center gap-1 text-sm"><input type="checkbox" class="ib" value="${sec}"> ${SECTOR_NAME[sec]}</label>`).join('')}</div>`;
     } else if (card.action === 'Akuisisi') {
       extra = `<p class="text-xs text-slate-300">Pilih lawan sebagai target:</p>
@@ -120,9 +119,10 @@
         <select id="tf-sell" class="w-full px-3 py-2 rounded-xl bg-slate-800"><option value="">Jangan jual</option>
         ${Object.keys(owned).map(sec => `<option value="${sec}">${SECTOR_NAME[sec]} (${owned[sec]} lembar)</option>`).join('')}</select>`;
     } else if (card.action === 'Rumor') {
-      extra = `<p class="text-xs text-slate-300">Geser harga sektor:</p>
-        <div class="flex gap-2 items-center"><select id="ru-sec" class="flex-1 px-3 py-2 rounded-xl bg-slate-800">${room.sectorOrder.map(sec => `<option value="${sec}">${SECTOR_NAME[sec]} (${room.prices[sec]})</option>`).join('')}</select>
-        <select id="ru-d" class="px-3 py-2 rounded-xl bg-slate-800"><option value="1">+1</option><option value="-1">-1</option></select></div>`;
+      const row = i => `<div class="flex gap-2 items-center">
+          <select id="ru-sec${i}" class="flex-1 px-3 py-2 rounded-xl bg-slate-800">${E.SECTORS.map(sec => `<option value="${sec}">${SECTOR_NAME[sec]} (${room.prices[sec]})</option>`).join('')}</select>
+          <select id="ru-d${i}" class="px-3 py-2 rounded-xl bg-slate-800"><option value="1">+1</option><option value="-1">-1</option></select></div>`;
+      extra = `<p class="text-xs text-slate-300">Pilih 2 sektor berbeda, masing-masing naik/turun 1 poin:</p>${row(1)}${row(2)}`;
     }
 
     panel.classList.remove('hidden');
@@ -143,7 +143,9 @@
       if (card.action === 'Info Bursa') a.sectors = [...document.querySelectorAll('.ib:checked')].map(x => x.value);
       if (card.action === 'Akuisisi') a.targetUid = document.querySelector('input[name=aq]:checked')?.value;
       if (card.action === 'Trading Fee') a.sellSector = $('tf-sell').value || null;
-      if (card.action === 'Rumor') { a.sector = $('ru-sec').value; a.delta = Number($('ru-d').value); }
+      if (card.action === 'Rumor') {
+        a.changes = [1, 2].map(i => ({ sector: $(`ru-sec${i}`).value, delta: Number($(`ru-d${i}`).value) }));
+      }
       act(() => transact(code, r => E.takeCard(r, uid, a)));
     };
   }

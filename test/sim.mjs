@@ -49,17 +49,19 @@ function playOne() {
       if (o.canActivate && (!o.canSave || Math.random() < 0.6)) {
         const a = { cardId: card.id, mode: 'activate' };
         if (card.action === 'Quickbuy') {
-          const need = Math.min(2, room.tableCards.length - 1);
-          a.cardIds = room.tableCards.filter(c => c.id !== card.id).slice(0, need).map(c => c.id);
+          a.cardIds = [room.tableCards.find(c => c.id !== card.id).id];
         } else if (card.action === 'Info Bursa') {
-          a.sectors = [room.sectorOrder[0], room.sectorOrder[3]];
+          a.sectors = [...room.sectorOrder].slice(0, 3);
         } else if (card.action === 'Akuisisi') {
           a.targetUid = o.targets[0].uid;
         } else if (card.action === 'Trading Fee') {
           a.sellSector = E.ALL[rnd(5)];
         } else if (card.action === 'Rumor') {
-          a.sector = room.sectorOrder[rnd(4)];
-          a.delta = Math.random() < 0.5 ? 1 : -1;
+          const [s1, s2] = [...room.sectorOrder].sort(() => Math.random() - 0.5);
+          a.changes = [
+            { sector: s1, delta: Math.random() < 0.5 ? 1 : -1 },
+            { sector: s2, delta: Math.random() < 0.5 ? 1 : -1 },
+          ];
         }
         E.takeCard(room, uid, a);
       } else {

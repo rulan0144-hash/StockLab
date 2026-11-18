@@ -108,7 +108,7 @@ export function addPlayer(room, uid, name) {
   const clean = String(name || '').trim().slice(0, 20);
   if (!clean) throw new Error('Nama wajib diisi');
   if (room.players.some(p => p.name.toLowerCase() === clean.toLowerCase())) throw new Error('Nama sudah dipakai');
-  room.players.push({ uid, name: clean, order: room.players.length + 1, coins: START_COINS, cards: [], lastBid: null, bidDone: false });
+  room.players.push({ uid, name: clean, order: room.players.length + 1, coins: START_COINS, cards: [], lastBid: null, bidDone: false, skipTurn: false });
   room.uids = [...room.uids.filter(u => u !== uid), uid];
   log(room, `${clean} bergabung ke meja.`);
 }
@@ -138,7 +138,7 @@ export function dealRound(room, secret, ps) {
   room.tableCards = secret.actionDeck.splice(0, room.players.length * 2);
   room.deckCount = secret.actionDeck.length;
   room.economyLeft = countEconomy(room, secret);
-  room.players.forEach(p => { p.bidDone = false; });
+  room.players.forEach(p => { p.bidDone = false; p.skipTurn = false; });
   for (const p of room.players) ps[p.uid] = { bid: null, peek: {} };
   log(room, `Ronde ${room.round}: ${room.tableCards.length} kartu aksi dibuka. Ajukan lelang tertutup.`);
 }
@@ -202,8 +202,9 @@ function acquisitionTargets(room, p, sec) {
 
 export function evaluate(room, p, card) {
   const owned = shares(p, card.sector);
+  // Trading Fee: dibayar saat mengambil kartu, 1 Koin per saham sektor ini yang dimiliki (termasuk kartu ini)
   const saveFee = card.action === 'Trading Fee' ? owned + 1 : 0;
-  const activateFee = card.action === 'Trading Fee' ? owned : 0;
+  const activateFee = saveFee;
   const targets = card.action === 'Akuisisi' ? acquisitionTargets(room, p, card.sector) : [];
   const others = room.tableCards.filter(c => c.id !== card.id);
   // Anti-buntu: jika tidak ada langkah legal sama sekali, simpan tetap diizinkan
@@ -232,7 +233,15 @@ export function options(room, uid) {
 }
 
 function endAction(room) {
-  room.actionIdx = (room.actionIdx + 1) % room.players.length;
+  const n = room.players.length;
+  room.actionIdx = (room.actionIdx + 1) % n;
+  // Lewati giliran pemain yang memakai Quickbuy di ronde ini (hanya sekali)
+  for (let i = 0; i < n && room.tableCards.length && ordered(room)[room.actionIdx].skipTurn; i++) {
+    const skipped = ordered(room)[room.actionIdx];
+    skipped.skipTurn = false;
+    log(room, `${skipped.name} dilewati (efek Quickbuy).`);
+    room.actionIdx = (room.actionIdx + 1) % n;
+  }
   if (room.tableCards.length === 0) {
     room.step = 'sell'; room.sellIdx = 0;
     log(room, 'Fase Aksi selesai. Fase Jual dimulai.');
@@ -261,20 +270,22 @@ export function takeCard(room, uid, a) {
 
   switch (card.action) {
     case 'Quickbuy': {
-      const need = Math.min(2, room.tableCards.length - 1);
+      // Kartu Quickbuy ini dan 1 kartu lain dari meja menjadi milik pemain.
+      // Kartu kedua tidak punya efek. Giliran pemain berikutnya di ronde ini dilewati.
       const ids = [...new Set(a.cardIds || [])];
-      if (ids.length !== need) throw new Error(`Pilih tepat ${need} kartu dari meja`);
-      const picks = ids.map(id => room.tableCards.find(c => c.id === id && c.id !== card.id));
-      if (picks.some(x => !x)) throw new Error('Kartu pilihan tidak valid');
+      if (ids.length !== 1) throw new Error('Pilih tepat 1 kartu lain dari meja');
+      const pick = room.tableCards.find(c => c.id === ids[0] && c.id !== card.id);
+      if (!pick) throw new Error('Kartu pilihan tidak valid');
       removeFromTable(room, card.id);
-      room.discard.unshift(card);
-      for (const pk of picks) { removeFromTable(room, pk.id); p.cards.push(newHolding(p, pk.sector)); }
-      log(room, `${p.name} mengaktifkan Quickbuy & menyimpan ${picks.map(x => SHORT[x.sector]).join(' + ') || '-'}.`);
+      removeFromTable(room, pick.id);
+      p.cards.push(newHolding(p, card.sector), newHolding(p, pick.sector));
+      p.skipTurn = true;
+      log(room, `${p.name} mengaktifkan Quickbuy & menyimpan ${SHORT[card.sector]} + ${SHORT[pick.sector]}. Giliran berikutnya di ronde ini hangus.`);
       break;
     }
     case 'Info Bursa': {
-      const secs = [...new Set(a.sectors || [])].filter(s => room.sectorOrder.includes(s)).slice(0, 3);
-      if (!secs.length) throw new Error('Pilih minimal 1 sektor untuk diintip');
+      const secs = [...new Set(a.sectors || [])].filter(s => room.sectorOrder.includes(s));
+      if (secs.length !== 3) throw new Error('Pilih tepat 3 sektor untuk diintip');
       removeFromTable(room, card.id);
       room.discard.unshift(card);
       // Bandar yang akan mengisi intipan dari dek rahasia (lihat fulfillPeeks)
@@ -310,13 +321,18 @@ export function takeCard(room, uid, a) {
       break;
     }
     case 'Rumor': {
-      if (!SECTORS.includes(a.sector)) throw new Error('Pilih sektor saham untuk Rumor');
-      const delta = a.delta === -1 ? -1 : 1;
+      // Dua sektor berbeda, masing-masing naik atau turun 1 poin. Tidak memicu crash/split (harga dibatasi 1-10).
+      const ch = Array.isArray(a.changes) ? a.changes : [];
+      if (ch.length !== 2) throw new Error('Pilih 2 sektor berbeda untuk Rumor');
+      if (new Set(ch.map(c => c.sector)).size !== 2) throw new Error('Kedua sektor harus berbeda');
+      if (ch.some(c => !SECTORS.includes(c.sector) || ![1, -1].includes(c.delta))) throw new Error('Sektor atau arah Rumor tidak valid');
       removeFromTable(room, card.id);
       room.discard.unshift(card);
-      const old = room.prices[a.sector];
-      room.prices[a.sector] = Math.max(1, Math.min(10, old + delta));
-      log(room, `Rumor oleh ${p.name}: harga ${SHORT[a.sector]} ${old} → ${room.prices[a.sector]}.`);
+      for (const c of ch) {
+        const old = room.prices[c.sector];
+        room.prices[c.sector] = Math.max(1, Math.min(10, old + c.delta));
+        log(room, `Rumor oleh ${p.name}: harga ${SHORT[c.sector]} ${old} → ${room.prices[c.sector]}.`);
+      }
       break;
     }
     default:
