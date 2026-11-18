@@ -8,6 +8,16 @@ export const ALL = [...SECTORS, 'reksadana'];
 export const SHORT = { konsumer: 'Konsumer', keuangan: 'Keuangan', tambang: 'Tambang', agrikultur: 'Agrikultur', reksadana: 'Reksadana' };
 export const START_COINS = 15;
 export const START_PRICE = 5;
+// Papan harga tiap sektor: angka yang tertera di papan, dari rendah ke tinggi.
+// Satu "poin" pada kartu = satu langkah di papan ini. Di bawah ujung bawah = Stock Crash, di atas ujung atas = Stock Split.
+export const TRACKS = {
+  tambang: [2, 3, 5, 6, 8, 9],
+  konsumer: [1, 2, 3, 4, 5, 6, 7, 8],
+  keuangan: [1, 3, 4, 5, 6, 7, 9],
+  agrikultur: [1, 2, 4, 5, 6, 8, 9],
+};
+const startPos = sec => TRACKS[sec].indexOf(START_PRICE);
+function setPos(room, sec, pos) { room.pos[sec] = pos; room.prices[sec] = TRACKS[sec][pos]; }
 export const MAX_ROUNDS = 6;
 export const DEBT_LOAN = 10;
 export const DEBT_PENALTY = 13;
@@ -47,7 +57,9 @@ function buildActionDeck() {
     push(3, s, 'Quickbuy'); push(3, s, 'Akuisisi');
     push(2, s, 'Info Bursa'); push(2, s, 'Trading Fee'); push(2, s, 'Rumor');
   }
-  push(4, 'reksadana', 'Info Bursa'); push(4, 'reksadana', 'Trading Fee'); push(4, 'reksadana', 'Rumor');
+  // Reksadana juga punya kelima jenis kartu (12 kartu)
+  push(3, 'reksadana', 'Quickbuy'); push(3, 'reksadana', 'Akuisisi');
+  push(2, 'reksadana', 'Info Bursa'); push(2, 'reksadana', 'Trading Fee'); push(2, 'reksadana', 'Rumor');
   return shuffle(deck); // 60 kartu
 }
 
@@ -55,7 +67,7 @@ function buildActionDeck() {
 export function newRoomDoc(code, bankUid) {
   return {
     code, bankUid, uids: [], status: 'lobby', step: 'lobby', round: 0, maxRounds: MAX_ROUNDS,
-    sectorOrder: [], prices: {}, tableCards: [], discard: [], deckCount: 0, economyLeft: {},
+    sectorOrder: [], prices: {}, pos: {}, tableCards: [], discard: [], deckCount: 0, economyLeft: {},
     lastEconomy: null, bidResult: null, actionIdx: 0, sellIdx: 0, peekRequests: [],
     players: [], log: [], standings: null, createdAt: Date.now(),
   };
@@ -120,7 +132,8 @@ export function startGame(room) {
   if (room.players.length < MIN_PLAYERS) throw new Error(`Minimal ${MIN_PLAYERS} pemain`);
   room.status = 'playing';
   room.sectorOrder = shuffle(SECTORS);
-  room.prices = Object.fromEntries(SECTORS.map(s => [s, START_PRICE]));
+  room.pos = {}; room.prices = {};
+  SECTORS.forEach(sec => setPos(room, sec, startPos(sec)));
   const eco = buildEconomyDeck();
   const economy = {};
   room.sectorOrder.forEach((s, i) => { economy[s] = eco.slice(i * 6, (i + 1) * 6); });
@@ -321,16 +334,19 @@ export function takeCard(room, uid, a) {
       break;
     }
     case 'Rumor': {
-      // Dua sektor berbeda, masing-masing naik atau turun 1 poin. Tidak memicu crash/split (harga dibatasi 1-10).
+      // Pilihan 1: satu sektor naik 2 langkah atau turun 2 langkah.
+      // Pilihan 2: dua sektor berbeda, masing-masing 1 langkah (naik atau turun).
+      // Dibatasi ujung papan, jadi tidak memicu crash/split.
       const ch = Array.isArray(a.changes) ? a.changes : [];
-      if (ch.length !== 2) throw new Error('Pilih 2 sektor berbeda untuk Rumor');
-      if (new Set(ch.map(c => c.sector)).size !== 2) throw new Error('Kedua sektor harus berbeda');
-      if (ch.some(c => !SECTORS.includes(c.sector) || ![1, -1].includes(c.delta))) throw new Error('Sektor atau arah Rumor tidak valid');
+      if (ch.some(c => !SECTORS.includes(c.sector) || ![1, -1, 2, -2].includes(c.delta))) throw new Error('Sektor atau arah Rumor tidak valid');
+      const okOne = ch.length === 1 && Math.abs(ch[0].delta) === 2;
+      const okTwo = ch.length === 2 && ch[0].sector !== ch[1].sector && ch.every(c => Math.abs(c.delta) === 1);
+      if (!okOne && !okTwo) throw new Error('Rumor: 1 sektor 2 langkah, atau 2 sektor berbeda masing-masing 1 langkah');
       removeFromTable(room, card.id);
       room.discard.unshift(card);
       for (const c of ch) {
         const old = room.prices[c.sector];
-        room.prices[c.sector] = Math.max(1, Math.min(10, old + c.delta));
+        setPos(room, c.sector, Math.max(0, Math.min(TRACKS[c.sector].length - 1, room.pos[c.sector] + c.delta)));
         log(room, `Rumor oleh ${p.name}: harga ${SHORT[c.sector]} ${old} → ${room.prices[c.sector]}.`);
       }
       break;
@@ -436,21 +452,21 @@ export function revealEconomy(room, secret) {
     }
   }
   for (const sec of room.sectorOrder) {
-    const next = room.prices[sec] + totals[sec];
-    if (next < 1) {
+    const next = room.pos[sec] + totals[sec];
+    if (next < 0) {
       let lost = 0;
       room.players.forEach(p => {
         const sh = shares(p, sec);
         if (sh) { lost += sh; p.cards = p.cards.filter(c => c.isDebt || c.sector !== sec); }
       });
-      room.prices[sec] = START_PRICE;
+      setPos(room, sec, startPos(sec));
       events.push(`STOCK CRASH ${SHORT[sec]}! ${lost} lembar hilang, harga kembali ${START_PRICE}.`);
-    } else if (next > 10) {
+    } else if (next > TRACKS[sec].length - 1) {
       room.players.forEach(p => p.cards.forEach(c => { if (!c.isDebt && c.sector === sec) c.multiplier *= 2; }));
-      room.prices[sec] = START_PRICE;
+      setPos(room, sec, startPos(sec));
       events.push(`STOCK SPLIT ${SHORT[sec]}! Token Split ×2 diberikan, harga kembali ${START_PRICE}.`);
     } else {
-      room.prices[sec] = next;
+      setPos(room, sec, next);
     }
   }
   room.lastEconomy = {

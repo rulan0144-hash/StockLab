@@ -14,7 +14,7 @@ export const ACTION_DESC = {
   'Info Bursa': 'Intip kartu Ekonomi paling atas dari tepat 3 sektor saham (rahasia).',
   'Akuisisi': 'Ambil 1 kartu saham dari lawan (non-Reksadana). Saham Anda harus lebih banyak atau sama. Lawan dapat +4 Koin.',
   'Trading Fee': 'Bayar 1 Koin per saham sektor ini termasuk kartu ini. Boleh langsung jual semua saham 1 jenis.',
-  'Rumor': 'Pilih 2 sektor berbeda, masing-masing naik atau turun 1 poin.',
+  'Rumor': 'Pilih 1 sektor naik/turun 2 langkah, atau 2 sektor berbeda masing-masing 1 langkah di papan.',
 };
 export const STEP_LABEL = {
   lobby: 'Menunggu pemain', bidding: 'Fase I • Lelang', action: 'Fase II • Aksi', sell: 'Fase III • Jual',

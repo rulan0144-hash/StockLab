@@ -59,14 +59,14 @@
   const show = (id, on) => $(id).classList.toggle('hidden', !on);
   const message = text => { $('message').textContent = text; show('message', true); show('lobby', false); show('game', false); show('ended', false); };
 
+  const TRACKS = { tambang: [2, 3, 5, 6, 8, 9], konsumer: [1, 2, 3, 4, 5, 6, 7, 8], keuangan: [1, 3, 4, 5, 6, 7, 9], agrikultur: [1, 2, 4, 5, 6, 8, 9] };
+  // Papan sektor: hanya angka yang tertera di papan fisik; penanda ada di harga sekarang.
   function track(price, sec) {
-    let rows = '';
-    for (let p = 10; p >= 1; p--) {
+    return [...TRACKS[sec]].reverse().map(p => {
       const here = p === price;
-      rows += `<div class="flex items-center justify-between px-1.5 text-[11px] font-mono ${here ? 'text-amber-300 font-bold' : p === 5 ? 'text-white/90' : 'text-white/40'}">
+      return `<div class="flex items-center justify-between px-1.5 text-[11px] font-mono ${here ? 'text-amber-300 font-bold' : p === 5 ? 'text-white/90' : 'text-white/40'}">
         <span>${p}</span>${here ? `<span class="w-4 h-4 rounded-full border-2 border-white/80" style="background:${SECTOR_COLOR[sec]}"></span>` : ''}</div>`;
-    }
-    return rows;
+    }).join('');
   }
 
   function render(s) {

@@ -58,10 +58,10 @@ function playOne() {
           a.sellSector = E.ALL[rnd(5)];
         } else if (card.action === 'Rumor') {
           const [s1, s2] = [...room.sectorOrder].sort(() => Math.random() - 0.5);
-          a.changes = [
-            { sector: s1, delta: Math.random() < 0.5 ? 1 : -1 },
-            { sector: s2, delta: Math.random() < 0.5 ? 1 : -1 },
-          ];
+          const d = () => (Math.random() < 0.5 ? 1 : -1);
+          a.changes = Math.random() < 0.5
+            ? [{ sector: s1, delta: 2 * d() }]
+            : [{ sector: s1, delta: d() }, { sector: s2, delta: d() }];
         }
         E.takeCard(room, uid, a);
       } else {
@@ -91,7 +91,7 @@ function playOne() {
     }
     for (const sec of E.SECTORS) {
       const pr = room.prices[sec];
-      if (pr < 1 || pr > 10) throw new Error(`Harga ${sec} di luar batas: ${pr}`);
+      if (!E.TRACKS[sec].includes(pr)) throw new Error(`Harga ${sec} di luar batas: ${pr}`);
     }
     checkFirestoreSafe(room);
   }
