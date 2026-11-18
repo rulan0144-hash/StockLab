@@ -31,8 +31,8 @@ function playOne() {
 
     if (room.step === 'bidding') {
       for (const p of room.players) {
-        const lo = p.coins >= 1 ? 1 : 0;
-        const amt = lo + rnd(p.coins - lo + 1);
+        const mx = Math.max(0, p.coins), lo = mx >= 1 ? 1 : 0;
+        const amt = lo + rnd(mx - lo + 1);
         ps[p.uid].bid = E.validBid(p, amt);
         E.markBid(room, p.uid);
       }
@@ -87,7 +87,7 @@ function playOne() {
 
     // Invarian
     for (const p of room.players) {
-      if (p.coins < 0) throw new Error(`Koin negatif: ${p.coins}`);
+      if (p.coins < -10) throw new Error(`Koin terlalu negatif: ${p.coins}`);
     }
     for (const sec of E.SECTORS) {
       const pr = room.prices[sec];

@@ -187,8 +187,9 @@ export function markBid(room, uid) {
 
 export function validBid(p, amount) {
   const n = Math.floor(Number(amount));
-  const min = p.coins >= 1 ? 1 : 0;
-  if (!Number.isFinite(n) || n < min || n > p.coins) throw new Error(`Lelang harus antara ${min} dan ${p.coins} Koin`);
+  const max = Math.max(0, p.coins);
+  const min = max >= 1 ? 1 : 0;
+  if (!Number.isFinite(n) || n < min || n > max) throw new Error(`Lelang harus antara ${min} dan ${max} Koin`);
   return n;
 }
 
@@ -282,7 +283,7 @@ export function takeCard(room, uid, a) {
 
   if (a.mode === 'save') {
     if (!opt.canSave) throw new Error(opt.saveReason);
-    const fee = Math.min(p.coins, opt.saveFee);
+    const fee = Math.max(0, Math.min(p.coins, opt.saveFee));
     p.coins -= fee;
     removeFromTable(room, card.id);
     p.cards.push(newHolding(p, card.sector));
@@ -333,7 +334,7 @@ export function takeCard(room, uid, a) {
     }
     case 'Trading Fee': {
       if (a.sellSector && !ALL.includes(a.sellSector)) throw new Error('Sektor jual tidak valid');
-      const fee = Math.min(p.coins, opt.activateFee);
+      const fee = Math.max(0, Math.min(p.coins, opt.activateFee));
       removeFromTable(room, card.id);
       room.discard.unshift(card);
       p.coins -= fee;
@@ -473,7 +474,7 @@ export function revealEconomy(room, secret) {
         if (sh > 0) { p.coins += sh; events.push(`Deviden ${SHORT[sec]}: ${p.name} +${sh} Koin`); }
       }
     } else if (card.purple === 'road_tax') {
-      room.players.forEach(p => { const t = Math.min(p.coins, p.order); p.coins -= t; events.push(`Pajak Jalan: ${p.name} bayar ${t} Koin (urutan #${p.order})`); });
+      room.players.forEach(p => { const t = p.order; p.coins -= t; events.push(`Pajak Jalan: ${p.name} bayar ${t} Koin (urutan #${p.order})`); });
     } else if (card.purple === 'new_issue') {
       room.players.forEach(p => {
         const own = activeCards(p, sec);

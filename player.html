@@ -198,7 +198,7 @@
     show('bid-box', canBid);
     if (canBid) {
       const inp = $('bid-amt');
-      inp.min = me.coins >= 1 ? 1 : 0; inp.max = me.coins;
+      inp.min = me.coins >= 1 ? 1 : 0; inp.max = Math.max(0, me.coins);
       if (!inp.dataset.touched) inp.value = inp.min;
     }
 
