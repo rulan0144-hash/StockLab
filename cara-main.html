@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>StockLab • Cara main</title>
+  <link rel="stylesheet" href="css/theme.css" />
+  <style>
+    .wrap { max-width: 760px; margin: 0 auto; padding: 28px 18px 60px; display: grid; gap: 16px; }
+    .sheet h2 { margin: 0 0 8px; font-size: 22px; color: #ffd27a; }
+    .sheet p, .sheet li { font-size: 15px; line-height: 1.55; margin: 0 0 6px; }
+    .sheet ul { margin: 0; padding-left: 20px; }
+    .step { display: grid; grid-template-columns: 38px 1fr; gap: 12px; }
+    .step .n { width: 38px; height: 38px; border-radius: 50%; background: #fff; color: var(--ink); display: grid; place-items: center; font-family: var(--font-display); font-weight: 800; font-size: 20px; box-shadow: 0 3px 0 rgba(0,0,0,.3); }
+    .tag { display: inline-block; padding: 1px 9px; border-radius: 999px; color: #fff; font-family: var(--font-display); font-weight: 700; font-size: 13px; }
+    a.back { color: #ffd27a; font-weight: 700; }
+  </style>
+</head>
+<body class="felt">
+  <div class="wrap">
+    <div><a class="back" href="index.html">Kembali ke beranda</a></div>
+    <div class="logo" style="font-size:40px">$tockLab<small>Cara main</small></div>
+
+    <section class="sheet">
+      <h2>Tujuan</h2>
+      <p>Kumpulkan kekayaan terbanyak setelah 6 ronde. Skor = Koin + nilai semua saham (jumlah saham × harga sekarang) − 13 Koin per kartu hutang. Tiap pemain mulai dengan 15 Koin.</p>
+      <p>Tiga layar: <b>bandar</b> (satu orang yang menjalankan permainan, wajib membuka halamannya sampai selesai), <b>papan</b> (layar bersama), dan <b>pemain</b> (HP atau laptop masing-masing, masuk dengan kode ruangan).</p>
+    </section>
+
+    <section class="sheet" style="display:grid;gap:14px">
+      <h2>Satu ronde, empat fase</h2>
+      <div class="step"><span class="n">1</span><div><b>Lelang</b><p>Semua pemain diam-diam menawar Koin untuk menentukan urutan jalan. Tawaran tertinggi jadi urutan 1. Koin tawaran dibayar ke bank. Kalau punya Koin, minimal tawar 1.</p></div></div>
+      <div class="step"><span class="n">2</span><div><b>Aksi</b><p>Sesuai urutan, tiap pemain mengambil 1 kartu dari meja. Kartu bisa <b>disimpan</b> jadi 1 lembar saham sektornya, atau <b>diaktifkan</b> untuk memakai efeknya. Kartu aksi yang diaktifkan dibuang, kecuali Quickbuy.</p></div></div>
+      <div class="step"><span class="n">3</span><div><b>Jual</b><p>Sesuai urutan, pemain boleh menjual saham dengan harga sekarang, atau menahan.</p></div></div>
+      <div class="step"><span class="n">4</span><div><b>Ekonomi</b><p>Bandar membuka satu kartu Ekonomi per sektor. Harga bergerak naik atau turun, dan kartu ungu punya efek khusus.</p></div></div>
+    </section>
+
+    <section class="sheet">
+      <h2>Kartu aksi</h2>
+      <ul>
+        <li><b>Quickbuy:</b> ambil kartu ini dan 1 kartu lain dari meja. Keduanya jadi saham Anda, kartu kedua tanpa efek. Giliran Anda berikutnya di ronde itu hangus.</li>
+        <li><b>Info Bursa:</b> intip kartu Ekonomi paling atas dari tepat 3 sektor. Hasilnya rahasia.</li>
+        <li><b>Akuisisi:</b> ambil 1 kartu saham lawan, sektor apa pun (bukan Reksadana), asal saham Anda di sektor itu lebih banyak atau sama dengan lawan. Lawan dapat +4 Koin.</li>
+        <li><b>Trading Fee:</b> bayar 1 Koin per saham sektor itu yang Anda punya, ditambah 1 untuk kartu ini, baik saat disimpan maupun diaktifkan. Jika diaktifkan, boleh langsung menjual semua saham 1 jenis.</li>
+        <li><b>Rumor:</b> pilih 1 sektor naik atau turun 2 langkah, atau 2 sektor berbeda masing-masing 1 langkah. Batasnya ujung papan, tanpa crash atau split.</li>
+      </ul>
+    </section>
+
+    <section class="sheet">
+      <h2>Kartu Ekonomi</h2>
+      <ul>
+        <li><b>Merangkak</b> +1, <b>Melaju</b> +2, <b>Anjlok</b> −1, <b>Terjun</b> −2, <b>Crash</b> −3, <b>Sideways</b> 0.</li>
+        <li><b>Deviden:</b> tiap pemain dapat 1 Koin per saham sektor itu.</li>
+        <li><b>Resesi:</b> dihitung lebih dulu, semua saham di atas Harga Awal turun 1.</li>
+        <li><b>Restrukturisasi Ekonomi:</b> semua harga kembali ke Harga Awal dan efek kartu Ekonomi lain dibatalkan.</li>
+        <li><b>Penerbitan Saham Baru:</b> sektor itu turun 1, tiap pemilik dapat 1 saham tambahan (token Split ×2).</li>
+        <li><b>Pajak Jalan:</b> tiap pemain bayar Koin sesuai nomor urutannya.</li>
+        <li><b>Buyback:</b> sektor itu naik 1, semua pemilik wajib menjual semuanya, lalu harga kembali ke Harga Awal.</li>
+      </ul>
+      <p>Harga turun melewati ujung bawah papan = <b>Stock Crash</b>: semua saham sektor itu hilang dan harga kembali ke 5. Naik melewati ujung atas = <b>Stock Split</b>: saham pemilik berlipat 2 dan harga kembali ke 5.</p>
+    </section>
+
+    <section class="sheet">
+      <h2>Reksadana dan pinjaman</h2>
+      <ul>
+        <li><b>Reksadana:</b> harganya setengah dari jumlah harga dua sektor tengah (dibulatkan ke bawah). Kartu Reksadana tidak bisa diambil lewat Akuisisi.</li>
+        <li><b>Pinjam:</b> kalau Koin kurang untuk membayar kewajiban apa pun (fee, Pajak Jalan), balik 1 kartu saham untuk +10 Koin. Di akhir permainan kartu itu menjadi hutang −13 Koin. Kartu Reksadana tidak bisa dibalik.</li>
+      </ul>
+    </section>
+  </div>
+</body>
+</html>
